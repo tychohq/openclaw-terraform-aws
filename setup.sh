@@ -499,22 +499,7 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
     echo ""
 fi
 
-echo -e "${YELLOW}⚠️  Resources will be created in account $AWS_ACCOUNT_ID${NC}"
-echo ""
-echo "Resources to be created:"
-echo "  • 1 VPC with public subnet"
-echo "  • 1 EC2 instance (t3.micro)"
-echo "  • 1 Security group"
-echo "  • 1 IAM role for EC2"
-echo ""
-read -p "Do you want to proceed? [y/N]: " CONFIRM_ACCOUNT
-
-if [[ ! $CONFIRM_ACCOUNT =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "Aborted. No changes were made."
-    exit 0
-fi
-
+echo -e "${GREEN}✓ Target account confirmed: $AWS_ACCOUNT_ID${NC}"
 echo ""
 
 #═══════════════════════════════════════════════════════════════════════
@@ -546,16 +531,21 @@ echo ""
 # STEP 4: Check for Existing Resources
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 4/7: Checking for Existing Resources${NC}"
+echo -e "${YELLOW}STEP 4/7: Scanning Account for Existing Resources${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "Scanning account $AWS_ACCOUNT_ID in $AWS_REGION for existing resources..."
+echo "Scanning account $AWS_ACCOUNT_ID in $AWS_REGION..."
+echo "This ensures we don't accidentally destroy your existing resources."
 echo ""
 
-EXISTING_RESOURCES=()
+EXISTING_OPENCLAW=()
+EXISTING_ACCOUNT=()
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Check VPCs
+echo -e "${BLUE}Checking for OpenClaw-specific resources:${NC}"
+echo ""
+
+# Check VPCs with openclaw tag
 echo -n "  VPCs with 'openclaw' tag... "
 set +e
 EXISTING_VPC=$(aws ec2 describe-vpcs \
@@ -567,13 +557,13 @@ set -e
 if [ -n "$EXISTING_VPC" ] && [ "$EXISTING_VPC" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
     while read -r vpc_id vpc_name; do
-        [ -n "$vpc_id" ] && [ "$vpc_id" != "None" ] && EXISTING_RESOURCES+=("VPC: $vpc_id ($vpc_name)")
+        [ -n "$vpc_id" ] && [ "$vpc_id" != "None" ] && EXISTING_OPENCLAW+=("VPC: $vpc_id ($vpc_name)")
     done <<< "$EXISTING_VPC"
 else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check EC2 instances
+# Check EC2 instances with openclaw tag
 echo -n "  EC2 instances with 'openclaw' tag... "
 set +e
 EXISTING_EC2=$(aws ec2 describe-instances \
@@ -585,13 +575,13 @@ set -e
 if [ -n "$EXISTING_EC2" ] && [ "$EXISTING_EC2" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
     while read -r inst_id state inst_name; do
-        [ -n "$inst_id" ] && [ "$inst_id" != "None" ] && EXISTING_RESOURCES+=("EC2: $inst_id ($inst_name, $state)")
+        [ -n "$inst_id" ] && [ "$inst_id" != "None" ] && EXISTING_OPENCLAW+=("EC2: $inst_id ($inst_name, $state)")
     done <<< "$EXISTING_EC2"
 else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Security Groups
+# Check Security Groups with openclaw name
 echo -n "  Security Groups with 'openclaw' name... "
 set +e
 EXISTING_SG=$(aws ec2 describe-security-groups \
@@ -603,7 +593,7 @@ set -e
 if [ -n "$EXISTING_SG" ] && [ "$EXISTING_SG" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
     while read -r sg_id sg_name; do
-        [ -n "$sg_id" ] && [ "$sg_id" != "None" ] && EXISTING_RESOURCES+=("Security Group: $sg_id ($sg_name)")
+        [ -n "$sg_id" ] && [ "$sg_id" != "None" ] && EXISTING_OPENCLAW+=("Security Group: $sg_id ($sg_name)")
     done <<< "$EXISTING_SG"
 else
     echo -e "${GREEN}None${NC}"
@@ -616,7 +606,7 @@ EXISTING_ROLE=$(aws iam get-role --role-name openclaw-ec2-role --query 'Role.Arn
 set -e
 if [ -n "$EXISTING_ROLE" ] && [ "$EXISTING_ROLE" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
-    EXISTING_RESOURCES+=("IAM Role: openclaw-ec2-role")
+    EXISTING_OPENCLAW+=("IAM Role: openclaw-ec2-role")
 else
     echo -e "${GREEN}None${NC}"
 fi
@@ -628,12 +618,12 @@ EXISTING_PROFILE=$(aws iam get-instance-profile --instance-profile-name openclaw
 set -e
 if [ -n "$EXISTING_PROFILE" ] && [ "$EXISTING_PROFILE" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
-    EXISTING_RESOURCES+=("IAM Instance Profile: openclaw-ec2-profile")
+    EXISTING_OPENCLAW+=("IAM Instance Profile: openclaw-ec2-profile")
 else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Subnets
+# Check Subnets with openclaw tag
 echo -n "  Subnets with 'openclaw' tag... "
 set +e
 EXISTING_SUBNET=$(aws ec2 describe-subnets \
@@ -645,13 +635,13 @@ set -e
 if [ -n "$EXISTING_SUBNET" ] && [ "$EXISTING_SUBNET" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
     while read -r subnet_id subnet_name; do
-        [ -n "$subnet_id" ] && [ "$subnet_id" != "None" ] && EXISTING_RESOURCES+=("Subnet: $subnet_id ($subnet_name)")
+        [ -n "$subnet_id" ] && [ "$subnet_id" != "None" ] && EXISTING_OPENCLAW+=("Subnet: $subnet_id ($subnet_name)")
     done <<< "$EXISTING_SUBNET"
 else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Internet Gateways
+# Check Internet Gateways with openclaw tag
 echo -n "  Internet Gateways with 'openclaw' tag... "
 set +e
 EXISTING_IGW=$(aws ec2 describe-internet-gateways \
@@ -663,7 +653,7 @@ set -e
 if [ -n "$EXISTING_IGW" ] && [ "$EXISTING_IGW" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
     while read -r igw_id igw_name; do
-        [ -n "$igw_id" ] && [ "$igw_id" != "None" ] && EXISTING_RESOURCES+=("Internet Gateway: $igw_id ($igw_name)")
+        [ -n "$igw_id" ] && [ "$igw_id" != "None" ] && EXISTING_OPENCLAW+=("Internet Gateway: $igw_id ($igw_name)")
     done <<< "$EXISTING_IGW"
 else
     echo -e "${GREEN}None${NC}"
@@ -673,29 +663,139 @@ fi
 echo -n "  Local Terraform state file... "
 if [ -f "$SCRIPT_DIR/terraform/terraform.tfstate" ]; then
     echo -e "${YELLOW}Found${NC}"
-    EXISTING_RESOURCES+=("Local file: terraform.tfstate")
+    EXISTING_OPENCLAW+=("Local file: terraform.tfstate")
+else
+    echo -e "${GREEN}None${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}Checking account's existing infrastructure (non-OpenClaw):${NC}"
+echo ""
+
+# Count total VPCs in region
+echo -n "  Total VPCs in region... "
+set +e
+TOTAL_VPCS=$(aws ec2 describe-vpcs --region "$AWS_REGION" --query 'length(Vpcs)' --output text 2>/dev/null)
+set -e
+TOTAL_VPCS=${TOTAL_VPCS:-0}
+if [ "$TOTAL_VPCS" -gt 1 ]; then
+    echo -e "${CYAN}$TOTAL_VPCS VPCs${NC}"
+    EXISTING_ACCOUNT+=("$TOTAL_VPCS VPCs in region")
+else
+    echo -e "${GREEN}$TOTAL_VPCS (default only)${NC}"
+fi
+
+# Count running EC2 instances
+echo -n "  Running EC2 instances... "
+set +e
+TOTAL_EC2=$(aws ec2 describe-instances \
+    --filters "Name=instance-state-name,Values=running,stopped" \
+    --region "$AWS_REGION" \
+    --query 'length(Reservations[*].Instances[*])' \
+    --output text 2>/dev/null)
+set -e
+TOTAL_EC2=${TOTAL_EC2:-0}
+if [ "$TOTAL_EC2" -gt 0 ]; then
+    echo -e "${CYAN}$TOTAL_EC2 instances${NC}"
+    EXISTING_ACCOUNT+=("$TOTAL_EC2 EC2 instances running/stopped")
+else
+    echo -e "${GREEN}None${NC}"
+fi
+
+# Count RDS instances
+echo -n "  RDS databases... "
+set +e
+TOTAL_RDS=$(aws rds describe-db-instances --region "$AWS_REGION" --query 'length(DBInstances)' --output text 2>/dev/null)
+set -e
+TOTAL_RDS=${TOTAL_RDS:-0}
+if [ "$TOTAL_RDS" -gt 0 ]; then
+    echo -e "${CYAN}$TOTAL_RDS databases${NC}"
+    EXISTING_ACCOUNT+=("$TOTAL_RDS RDS databases")
+else
+    echo -e "${GREEN}None${NC}"
+fi
+
+# Count Lambda functions
+echo -n "  Lambda functions... "
+set +e
+TOTAL_LAMBDA=$(aws lambda list-functions --region "$AWS_REGION" --query 'length(Functions)' --output text 2>/dev/null)
+set -e
+TOTAL_LAMBDA=${TOTAL_LAMBDA:-0}
+if [ "$TOTAL_LAMBDA" -gt 0 ]; then
+    echo -e "${CYAN}$TOTAL_LAMBDA functions${NC}"
+    EXISTING_ACCOUNT+=("$TOTAL_LAMBDA Lambda functions")
+else
+    echo -e "${GREEN}None${NC}"
+fi
+
+# Count S3 buckets (global)
+echo -n "  S3 buckets (global)... "
+set +e
+TOTAL_S3=$(aws s3api list-buckets --query 'length(Buckets)' --output text 2>/dev/null)
+set -e
+TOTAL_S3=${TOTAL_S3:-0}
+if [ "$TOTAL_S3" -gt 0 ]; then
+    echo -e "${CYAN}$TOTAL_S3 buckets${NC}"
+    EXISTING_ACCOUNT+=("$TOTAL_S3 S3 buckets")
 else
     echo -e "${GREEN}None${NC}"
 fi
 
 echo ""
 
-# Report findings
-if [ ${#EXISTING_RESOURCES[@]} -gt 0 ]; then
+# Report OpenClaw findings
+if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
     echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║  ⚠️  EXISTING RESOURCES FOUND IN ACCOUNT $AWS_ACCOUNT_ID        ${NC}"
+    echo -e "${YELLOW}║  ⚠️  EXISTING OPENCLAW RESOURCES DETECTED                      ║${NC}"
     echo -e "${YELLOW}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "The following resources already exist:"
-    echo ""
-    for resource in "${EXISTING_RESOURCES[@]}"; do
+    for resource in "${EXISTING_OPENCLAW[@]}"; do
         echo -e "  ${YELLOW}•${NC} $resource"
     done
     echo ""
-    echo -e "${RED}WARNING: Proceeding may MODIFY or REPLACE these resources!${NC}"
+    echo -e "${RED}These resources may be MODIFIED or REPLACED by this deployment.${NC}"
+    echo ""
+fi
+
+# Report account summary
+if [ ${#EXISTING_ACCOUNT[@]} -gt 0 ]; then
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  ℹ️  ACCOUNT HAS EXISTING INFRASTRUCTURE                       ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "This account contains other resources:"
+    echo ""
+    for resource in "${EXISTING_ACCOUNT[@]}"; do
+        echo -e "  ${CYAN}•${NC} $resource"
+    done
+    echo ""
+    echo -e "${GREEN}OpenClaw deployment will NOT affect these resources.${NC}"
+    echo "OpenClaw creates isolated resources with 'openclaw' prefix."
+    echo ""
+fi
+
+# Summary and confirmation
+echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    DEPLOYMENT SUMMARY                         ║${NC}"
+echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "  Target Account:  $AWS_ACCOUNT_ID"
+echo "  Target Region:   $AWS_REGION"
+echo ""
+echo "  Resources to be created:"
+echo "    • 1 VPC (10.0.0.0/16) with 'openclaw-vpc' tag"
+echo "    • 1 Public subnet with 'openclaw-public' tag"
+echo "    • 1 Internet Gateway"
+echo "    • 1 Security Group (outbound only)"
+echo "    • 1 IAM Role (openclaw-ec2-role)"
+echo "    • 1 EC2 instance (t3.micro)"
+echo ""
+
+if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  ${#EXISTING_OPENCLAW[@]} existing OpenClaw resource(s) may be affected.${NC}"
     echo ""
     echo "Options:"
-    echo "  1) Continue - I understand existing resources may be modified"
+    echo "  1) Continue - I understand existing OpenClaw resources may be modified"
     echo "  2) Abort - Do not make any changes"
     echo ""
     read -p "Choose [1-2]: " EXISTING_CHOICE
@@ -705,17 +805,21 @@ if [ ${#EXISTING_RESOURCES[@]} -gt 0 ]; then
         echo "Aborted. No changes were made."
         echo ""
         echo "To manage existing resources:"
-        echo "  • Destroy: cd terraform && terraform destroy"
-        echo "  • Import:  terraform import <resource> <id>"
+        echo "  • Destroy first: cd terraform && terraform destroy"
+        echo "  • Or use a different region"
         exit 0
     fi
-    
-    echo ""
-    echo -e "${YELLOW}You chose to continue. Will analyze impact before making changes.${NC}"
     echo ""
 else
-    echo -e "${GREEN}✓ No existing OpenClaw resources found in this account.${NC}"
-    echo -e "${GREEN}  Safe to proceed with fresh deployment.${NC}"
+    echo -e "${GREEN}✓ No conflicts detected. Safe to proceed.${NC}"
+    echo ""
+    read -p "Do you want to proceed with deployment? [y/N]: " PROCEED_CHOICE
+    
+    if [[ ! $PROCEED_CHOICE =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "Aborted. No changes were made."
+        exit 0
+    fi
     echo ""
 fi
 
