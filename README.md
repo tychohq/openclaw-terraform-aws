@@ -10,20 +10,16 @@ cd openclawonaws
 ./setup.sh
 ```
 
-That's it! The wizard handles everything:
-- ✅ Deploys infrastructure
-- ✅ Stores your API keys securely
-- ✅ Starts OpenClaw
-- ✅ Configures Telegram webhook
+That's it! The wizard handles everything.
 
 ---
 
 ## What You Need
 
 1. **AWS account** with admin access
-2. **Domain name** pointed to AWS (can do after deploy)
-3. **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com)
-4. **Telegram bot token** from [@BotFather](https://t.me/BotFather)
+2. **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com)
+3. **Telegram bot token** from [@BotFather](https://t.me/BotFather)
+4. **Domain name** — only for Simple/Full deployments
 
 ### Prerequisites
 
@@ -31,7 +27,7 @@ That's it! The wizard handles everything:
 # macOS
 brew install terraform awscli jq
 
-# Ubuntu/Debian
+# Ubuntu/Debian  
 sudo apt install terraform awscli jq
 
 # Configure AWS
@@ -42,129 +38,80 @@ aws configure
 
 ## Deployment Options
 
-| | Simple | Full |
-|--|--------|------|
-| **Cost** | ~$18/month | ~$120/month |
-| **Best for** | Personal use | Production |
-| **Setup** | 5 minutes | 10 minutes |
-| **Security** | Good | Maximum |
+| | Minimal ⭐ | Simple | Full |
+|--|---------|--------|------|
+| **Cost** | ~$12/mo | ~$18/mo | ~$120/mo |
+| **Domain needed** | ❌ No | ✅ Yes | ✅ Yes |
+| **Best for** | Personal | Personal | Production |
+| **Telegram mode** | Polling | Webhook | Webhook |
+| **Setup time** | 5 min | 10 min | 15 min |
 
-The wizard asks which one you want.
+### Minimal (~$12/month) ⭐ Recommended
+
+Like your VPS setup — no domain, no fuss:
+```
+EC2 → polls Telegram API
+```
+
+### Simple (~$18/month)
+
+Adds webhook support with automatic HTTPS:
+```
+Internet → EC2 (Caddy + Let's Encrypt) → OpenClaw
+```
+
+### Full (~$120/month)
+
+Production-grade with all security features:
+```
+Internet → WAF → ALB → Private EC2 → VPC Endpoints
+```
 
 ---
 
 ## After Deployment
 
-### 1. Point Your Domain
+### Minimal (no domain)
+Just message your Telegram bot! 🎉
 
-The setup script shows you the IP or ALB address:
-
-```
-# Simple deployment
-openclaw.example.com → 1.2.3.4 (A record)
-
-# Full deployment  
-openclaw.example.com → abc123.elb.amazonaws.com (CNAME)
-```
-
-### 2. Test It
-
-Message your Telegram bot! 🎉
+### Simple/Full (with domain)
+Point your domain to the IP/ALB shown in the output, then message your bot.
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Check status
-./scripts/status.sh
-
-# Connect to instance
-./scripts/connect.sh
-
-# Update secrets
-./scripts/store-secrets.sh
-
-# Set/reset webhook
-./scripts/set-webhook.sh <bot-token> <domain>
-
-# Destroy everything
-./destroy.sh
+./scripts/status.sh      # Check deployment health
+./scripts/connect.sh     # SSH into instance (via SSM)
+./destroy.sh             # Remove everything
 ```
 
 ---
 
 ## Manual Deployment
 
-If you prefer to deploy manually:
-
 ```bash
-cd terraform/simple  # or terraform/full
+cd terraform/minimal  # or simple, or full
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars
-
 terraform init
 terraform apply
-
-# Then store secrets and start services
-# See terraform/simple/README.md or terraform/full/README.md
 ```
 
----
-
-## Architecture
-
-### Simple (~$18/month)
-```
-Internet → EC2 (Caddy TLS) → OpenClaw → Secrets Manager
-```
-
-### Full (~$120/month)
-```
-Internet → WAF → ALB → Private EC2 → VPC Endpoints → Secrets Manager
-```
-
----
-
-## Troubleshooting
-
-### Can't connect to instance
-```bash
-# Check instance is running
-./scripts/status.sh
-
-# Connect via SSM
-./scripts/connect.sh
-```
-
-### OpenClaw not responding
-```bash
-# Connect and check logs
-./scripts/connect.sh
-sudo journalctl -u openclaw -f
-sudo systemctl restart openclaw
-```
-
-### Webhook not working
-```bash
-# Re-set webhook
-./scripts/set-webhook.sh <bot-token> <domain>
-
-# Check Caddy/ALB
-curl -I https://your-domain.com/health
-```
+See [terraform/README.md](terraform/README.md) for details.
 
 ---
 
 ## Documentation
 
-- [Simple Deployment](terraform/simple/README.md)
-- [Full Deployment](terraform/full/README.md)
-- [Architecture Details](architecture.md)
-- [Security Report](SECURITY-REPORT.md)
+- [Minimal Deployment](terraform/minimal/README.md) — No domain, polling mode
+- [Simple Deployment](terraform/simple/README.md) — Domain + Caddy
+- [Full Deployment](terraform/full/README.md) — Production security
+- [Architecture](architecture.md) — Security design
+- [Security Report](SECURITY-REPORT.md) — Checkov scan results
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)

@@ -1,25 +1,38 @@
 # OpenClaw AWS Terraform
 
-Choose your deployment option:
+Choose your deployment:
 
 ## 🚀 Quick Comparison
 
-| Feature | Simple | Full |
-|---------|--------|------|
-| **Cost** | ~$18/month | ~$120/month |
-| **Best for** | Single user | Teams/Production |
-| **TLS** | Caddy (Let's Encrypt) | ALB + ACM |
-| **Network** | Public subnet | Private subnet |
-| **WAF** | ❌ | ✅ |
-| **High Availability** | ❌ | ✅ |
-| **VPC Endpoints** | ❌ | ✅ |
-| **Setup time** | ~30 min | ~1 hour |
+| Feature | Minimal ⭐ | Simple | Full |
+|---------|---------|--------|------|
+| **Cost** | ~$12/mo | ~$18/mo | ~$120/mo |
+| **Domain required** | ❌ | ✅ | ✅ |
+| **Telegram mode** | Polling | Webhook | Webhook |
+| **TLS** | N/A | Caddy | ALB + ACM |
+| **Network** | Public | Public | Private |
+| **WAF** | ❌ | ❌ | ✅ |
+| **VPC Endpoints** | ❌ | ❌ | ✅ |
 
 ---
 
-## Option 1: Simple (~$18/month)
+## Option 1: Minimal (~$12/month) ⭐
 
-**Best for:** Single Telegram user, personal use, cost-conscious
+**Best for:** Single Telegram user, no domain
+
+```bash
+cd minimal
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
+```
+
+[📖 Minimal README](minimal/README.md)
+
+---
+
+## Option 2: Simple (~$18/month)
+
+**Best for:** Single user with domain, webhook mode
 
 ```bash
 cd simple
@@ -31,9 +44,9 @@ terraform init && terraform apply
 
 ---
 
-## Option 2: Full (~$120/month)
+## Option 3: Full (~$120/month)
 
-**Best for:** Production, multiple users, compliance requirements
+**Best for:** Production, multiple users, compliance
 
 ```bash
 cd full
@@ -48,35 +61,21 @@ terraform init && terraform apply
 ## Decision Guide
 
 ```
-                    ┌─────────────────────┐
-                    │  How many users?    │
-                    └──────────┬──────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-              ▼                ▼                ▼
-         Just me         2-5 users        Enterprise
-              │                │                │
-              ▼                ▼                ▼
-         ┌────────┐      ┌─────────┐     ┌─────────┐
-         │ SIMPLE │      │  FULL   │     │  FULL   │
-         │ $18/mo │      │ $120/mo │     │ + HA/DR │
-         └────────┘      └─────────┘     └─────────┘
+Do you have a domain?
+        │
+        ├── No ──────────────► MINIMAL ($12/mo)
+        │
+        └── Yes
+             │
+             └── How many users?
+                      │
+                      ├── Just me ───► SIMPLE ($18/mo)
+                      │
+                      └── Multiple ──► FULL ($120/mo)
 ```
 
-## Prerequisites (Both Options)
+## Prerequisites
 
-1. AWS account with admin access
-2. AWS CLI configured (`aws configure`)
-3. Terraform >= 1.5.0
-4. A domain name
-
-## After Deployment
-
-Both options require:
-1. Point your domain to the IP/ALB
-2. Store secrets in AWS Secrets Manager
-3. Start the OpenClaw service
-4. Set Telegram webhook
-
-See the README in each folder for detailed steps.
+1. AWS CLI configured (`aws configure`)
+2. Terraform >= 1.5.0
+3. For Simple/Full: a domain name

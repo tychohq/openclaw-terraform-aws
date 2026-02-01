@@ -73,27 +73,35 @@ get_user_input() {
     # Deployment type
     echo -e "${BLUE}Which deployment do you want?${NC}"
     echo ""
-    echo "  1) Simple  - Single user, ~\$18/month"
-    echo "              EC2 + Caddy, minimal setup"
+    echo "  1) Minimal - Single user, ~\$12/month ⭐ RECOMMENDED"
+    echo "              No domain needed, polling mode"
     echo ""
-    echo "  2) Full    - Production, ~\$120/month"
+    echo "  2) Simple  - Single user, ~\$18/month"
+    echo "              Requires domain, webhook mode"
+    echo ""
+    echo "  3) Full    - Production, ~\$120/month"
     echo "              ALB + WAF + Private subnet"
     echo ""
-    read -p "Choose [1/2]: " DEPLOY_TYPE
+    read -p "Choose [1/2/3]: " DEPLOY_TYPE
     
     case $DEPLOY_TYPE in
-        1) DEPLOY_DIR="simple" ;;
-        2) DEPLOY_DIR="full" ;;
+        1) DEPLOY_DIR="minimal"; NEEDS_DOMAIN=false ;;
+        2) DEPLOY_DIR="simple"; NEEDS_DOMAIN=true ;;
+        3) DEPLOY_DIR="full"; NEEDS_DOMAIN=true ;;
         *) echo "Invalid choice"; exit 1 ;;
     esac
     
     echo ""
     
-    # Domain
-    read -p "Enter your domain name (e.g., openclaw.example.com): " DOMAIN_NAME
-    if [ -z "$DOMAIN_NAME" ]; then
-        echo -e "${RED}Domain name is required${NC}"
-        exit 1
+    # Domain (only for simple/full)
+    if [ "$NEEDS_DOMAIN" = true ]; then
+        read -p "Enter your domain name (e.g., openclaw.example.com): " DOMAIN_NAME
+        if [ -z "$DOMAIN_NAME" ]; then
+            echo -e "${RED}Domain name is required for this deployment type${NC}"
+            exit 1
+        fi
+    else
+        DOMAIN_NAME=""
     fi
     
     # Region
@@ -125,7 +133,11 @@ get_user_input() {
     echo ""
     echo -e "${GREEN}Configuration summary:${NC}"
     echo "  Deployment:  $DEPLOY_DIR"
-    echo "  Domain:      $DOMAIN_NAME"
+    if [ -n "$DOMAIN_NAME" ]; then
+        echo "  Domain:      $DOMAIN_NAME"
+    else
+        echo "  Domain:      (not needed - polling mode)"
+    fi
     echo "  Region:      $AWS_REGION"
     echo "  Anthropic:   ${ANTHROPIC_KEY:0:10}..."
     echo "  Telegram:    ${TELEGRAM_TOKEN:0:10}..."
@@ -145,11 +157,18 @@ create_tfvars() {
     
     cd "terraform/$DEPLOY_DIR"
     
-    cat > terraform.tfvars << EOF
+    if [ -n "$DOMAIN_NAME" ]; then
+        cat > terraform.tfvars << EOF
 aws_region  = "$AWS_REGION"
 domain_name = "$DOMAIN_NAME"
 environment = "prod"
 EOF
+    else
+        cat > terraform.tfvars << EOF
+aws_region  = "$AWS_REGION"
+environment = "prod"
+EOF
+    fi
     
     echo -e "${GREEN}✓ Created terraform.tfvars${NC}"
 }
@@ -189,10 +208,13 @@ store_secrets() {
         --secret-string "$TELEGRAM_TOKEN" \
         --region "$AWS_REGION" || true
     
-    aws secretsmanager put-secret-value \
-        --secret-id "$project_name/gateway-auth-token" \
-        --secret-string "$GATEWAY_TOKEN" \
-        --region "$AWS_REGION" || true
+    # Gateway token only for simple/full (webhook mode)
+    if [ "$DEPLOY_DIR" != "minimal" ]; then
+        aws secretsmanager put-secret-value \
+            --secret-id "$project_name/gateway-auth-token" \
+            --secret-string "$GATEWAY_TOKEN" \
+            --region "$AWS_REGION" || true
+    fi
     
     echo -e "${GREEN}✓ Secrets stored${NC}"
 }
