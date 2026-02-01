@@ -76,7 +76,7 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}STEP 2/7: Verifying AWS Account Access${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "Checking your AWS credentials and account access..."
+echo "Checking your AWS credentials..."
 echo ""
 
 if ! AWS_IDENTITY=$(aws sts get-caller-identity 2>&1); then
@@ -93,12 +93,133 @@ AWS_ACCOUNT_ID=$(echo "$AWS_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"'
 AWS_USER_ARN=$(echo "$AWS_IDENTITY" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
 AWS_USER=$(echo "$AWS_USER_ARN" | rev | cut -d'/' -f1 | rev)
 
-echo -e "  Account ID:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
-echo -e "  User/Role:   ${GREEN}$AWS_USER${NC}"
-echo -e "  ARN:         ${GREEN}$AWS_USER_ARN${NC}"
+echo -e "  Current Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
+echo -e "  Current User:     ${GREEN}$AWS_USER${NC}"
 echo ""
 
-echo -e "${YELLOW}⚠️  IMPORTANT: This wizard will create AWS resources in this account.${NC}"
+echo "Where do you want to deploy OpenClaw?"
+echo ""
+echo "  1) Use current account ($AWS_ACCOUNT_ID)"
+echo "  2) Use a different AWS profile"
+echo "  3) Assume role in a different account"
+echo ""
+read -p "Choose [1-3, default 1]: " ACCOUNT_CHOICE
+
+if [ "$ACCOUNT_CHOICE" = "2" ]; then
+    echo ""
+    echo -e "${BLUE}AWS Profile Selection${NC}"
+    echo ""
+    
+    # List available profiles
+    echo "Available profiles:"
+    if [ -f ~/.aws/credentials ]; then
+        grep '^\[' ~/.aws/credentials | tr -d '[]' | while read profile; do
+            echo "  • $profile"
+        done
+    fi
+    if [ -f ~/.aws/config ]; then
+        grep '^\[profile ' ~/.aws/config | sed 's/\[profile /  • /' | tr -d ']'
+    fi
+    echo ""
+    
+    read -p "Enter profile name: " AWS_PROFILE_NAME
+    
+    if [ -z "$AWS_PROFILE_NAME" ]; then
+        echo -e "${RED}Error: Profile name is required${NC}"
+        exit 1
+    fi
+    
+    export AWS_PROFILE="$AWS_PROFILE_NAME"
+    
+    echo ""
+    echo "Verifying profile access..."
+    
+    if ! NEW_IDENTITY=$(aws sts get-caller-identity 2>&1); then
+        echo -e "${RED}✗ Cannot access AWS with profile '$AWS_PROFILE_NAME'${NC}"
+        echo ""
+        echo "Error: $NEW_IDENTITY"
+        exit 1
+    fi
+    
+    AWS_ACCOUNT_ID=$(echo "$NEW_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
+    AWS_USER_ARN=$(echo "$NEW_IDENTITY" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
+    AWS_USER=$(echo "$AWS_USER_ARN" | rev | cut -d'/' -f1 | rev)
+    
+    echo -e "${GREEN}✓ Profile '$AWS_PROFILE_NAME' verified${NC}"
+    echo ""
+    echo -e "  Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
+    echo -e "  User:     ${GREEN}$AWS_USER${NC}"
+    echo ""
+
+elif [ "$ACCOUNT_CHOICE" = "3" ]; then
+    echo ""
+    echo -e "${BLUE}Assume Role Configuration${NC}"
+    echo ""
+    echo "Enter the Role ARN to assume."
+    echo "Format: arn:aws:iam::TARGET_ACCOUNT_ID:role/ROLE_NAME"
+    echo ""
+    read -p "Role ARN: " ROLE_ARN
+    
+    if [ -z "$ROLE_ARN" ]; then
+        echo -e "${RED}Error: Role ARN is required${NC}"
+        exit 1
+    fi
+    
+    # Optional: External ID (some roles require this)
+    echo ""
+    echo "External ID (leave empty if not required):"
+    read -p "External ID: " EXTERNAL_ID
+    
+    # Optional: Session name
+    SESSION_NAME="openclaw-setup-$(date +%s)"
+    
+    echo ""
+    echo "Assuming role..."
+    
+    # Build assume-role command
+    ASSUME_CMD="aws sts assume-role --role-arn $ROLE_ARN --role-session-name $SESSION_NAME"
+    if [ -n "$EXTERNAL_ID" ]; then
+        ASSUME_CMD="$ASSUME_CMD --external-id $EXTERNAL_ID"
+    fi
+    
+    # Assume the role
+    if ! ASSUMED_ROLE=$($ASSUME_CMD 2>&1); then
+        echo -e "${RED}✗ Failed to assume role${NC}"
+        echo ""
+        echo "Error: $ASSUMED_ROLE"
+        echo ""
+        echo "Common issues:"
+        echo "  • Role ARN is incorrect"
+        echo "  • Trust policy doesn't allow your account/user"
+        echo "  • External ID is required but not provided"
+        echo "  • Role doesn't exist"
+        exit 1
+    fi
+    
+    # Extract credentials
+    export AWS_ACCESS_KEY_ID=$(echo "$ASSUMED_ROLE" | grep -o '"AccessKeyId": "[^"]*"' | cut -d'"' -f4)
+    export AWS_SECRET_ACCESS_KEY=$(echo "$ASSUMED_ROLE" | grep -o '"SecretAccessKey": "[^"]*"' | cut -d'"' -f4)
+    export AWS_SESSION_TOKEN=$(echo "$ASSUMED_ROLE" | grep -o '"SessionToken": "[^"]*"' | cut -d'"' -f4)
+    
+    # Verify new identity
+    NEW_IDENTITY=$(aws sts get-caller-identity)
+    AWS_ACCOUNT_ID=$(echo "$NEW_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
+    AWS_USER_ARN=$(echo "$NEW_IDENTITY" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
+    AWS_USER=$(echo "$AWS_USER_ARN" | rev | cut -d'/' -f1 | rev)
+    
+    echo -e "${GREEN}✓ Role assumed successfully${NC}"
+    echo ""
+    echo -e "  Target Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
+    echo -e "  Assumed Role:    ${GREEN}$AWS_USER${NC}"
+    echo ""
+    
+    # Note about session expiration
+    EXPIRATION=$(echo "$ASSUMED_ROLE" | grep -o '"Expiration": "[^"]*"' | cut -d'"' -f4)
+    echo -e "${YELLOW}Note: Session expires at $EXPIRATION${NC}"
+    echo ""
+fi
+
+echo -e "${YELLOW}⚠️  IMPORTANT: This wizard will create AWS resources in account $AWS_ACCOUNT_ID${NC}"
 echo ""
 echo "Resources to be created:"
 echo "  • 1 VPC with public subnet"
@@ -106,7 +227,7 @@ echo "  • 1 EC2 instance (t3.micro)"
 echo "  • 1 Security group"
 echo "  • 1 IAM role for EC2"
 echo ""
-read -p "Do you want to proceed with account $AWS_ACCOUNT_ID? [y/N]: " CONFIRM_ACCOUNT
+read -p "Do you want to proceed? [y/N]: " CONFIRM_ACCOUNT
 
 if [[ ! $CONFIRM_ACCOUNT =~ ^[Yy]$ ]]; then
     echo ""
