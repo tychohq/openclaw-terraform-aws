@@ -4,7 +4,7 @@ One command to deploy OpenClaw on AWS.
 
 ## Cost: ~$10/month
 
-## Setup
+## Quick Start
 
 ```bash
 git clone https://github.com/rimaslogic/openclawonaws.git
@@ -12,15 +12,19 @@ cd openclawonaws
 ./setup.sh
 ```
 
-The wizard will:
-1. ✅ Check prerequisites (Terraform, AWS CLI)
-2. ✅ Ask for your Telegram bot token
-3. ✅ Ask for your Anthropic API key
-4. ✅ Deploy EC2 instance
-5. ✅ Configure OpenClaw
-6. ✅ Start the service
+## What the Wizard Does
 
-**Then message your Telegram bot!**
+The interactive wizard guides you through everything:
+
+1. **Checks prerequisites** — Terraform, AWS CLI
+2. **Verifies AWS access** — Shows account ID, asks for confirmation
+3. **Selects region** — Frankfurt, N. Virginia, or Oregon
+4. **Checks existing resources** — Warns if OpenClaw already deployed
+5. **Collects credentials** — Telegram token, Anthropic API key
+6. **Deploys infrastructure** — VPC, EC2, security groups
+7. **Configures OpenClaw** — Installs and starts the service
+
+**Then just message your Telegram bot!**
 
 ## Prerequisites
 
@@ -31,9 +35,15 @@ brew install terraform awscli
 # Ubuntu
 apt install terraform awscli
 
-# Configure AWS
+# Configure AWS credentials
 aws configure
 ```
+
+## What You Need
+
+- AWS account with admin access
+- Telegram bot token (from @BotFather)
+- Anthropic API key (from console.anthropic.com)
 
 ## Commands
 
@@ -44,7 +54,10 @@ aws ssm start-session --target <instance-id>
 # View logs
 sudo journalctl -u openclaw -f
 
-# Destroy
+# Restart
+sudo systemctl restart openclaw
+
+# Destroy everything
 cd terraform && terraform destroy
 ```
 
