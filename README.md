@@ -41,6 +41,7 @@ After the wizard finishes, connect over SSM and run onboarding as the `openclaw`
 ```bash
 # Install Terraform (https://terraform.io/downloads)
 # Install AWS CLI (https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+# Install SSM Session Manager plugin if missing (https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
 # Configure AWS credentials
 aws configure
 ```
