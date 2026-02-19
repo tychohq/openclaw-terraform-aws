@@ -1,8 +1,58 @@
-# Copy to terraform.tfvars and customize
+# Copy to terraform.tfvars and customize.
+# NEVER commit terraform.tfvars — it is gitignored.
 
-aws_region  = "eu-central-1"
+aws_region  = "us-east-1"
 environment = "prod"
 
-# Optional: change instance size
+# ── Instance ───────────────────────────────────────────────────────────────────
 # instance_type   = "t4g.small"
 # ebs_volume_size = 30
+
+# ── OpenClaw Config ────────────────────────────────────────────────────────────
+#
+# Option A: Reference files next to this repo (recommended)
+#   Place your filled-in config files alongside the repo, then reference them:
+#
+# openclaw_config_json        = file("../openclaw-secrets.json")
+# openclaw_env                = file("../openclaw-secrets.env")
+# openclaw_auth_profiles_json = file("../openclaw-auth-profiles.json")
+#
+# Option B: Inline string (for CI/CD — pass via TF_VAR_openclaw_config_json)
+#
+# Option C: Leave empty and configure manually over SSM after deploy
+# openclaw_config_json        = ""
+# openclaw_env                = ""
+# openclaw_auth_profiles_json = ""
+
+# ── Workspace Seed Files ───────────────────────────────────────────────────────
+#
+# Pre-populate the OpenClaw workspace with your identity/soul/agent files.
+# Uses the same openclaw-workspace/ folder from mac-mini-setup.
+#
+# workspace_files = {
+#   "SOUL.md"     = file("../openclaw-workspace/SOUL.md")
+#   "USER.md"     = file("../openclaw-workspace/USER.md")
+#   "AGENTS.md"   = file("../openclaw-workspace/AGENTS.md")
+#   "IDENTITY.md" = file("../openclaw-workspace/IDENTITY.md")
+#   "TOOLS.md"    = file("../openclaw-workspace/TOOLS.md")
+#   "MEMORY.md"   = file("../openclaw-workspace/MEMORY.md")
+# }
+
+# ── Skills ─────────────────────────────────────────────────────────────────────
+#
+# clawhub_skills = [
+#   "agent-browser",
+#   "research",
+#   "commit",
+#   "diagrams",
+#   "github",
+# ]
+
+# ── Extra System Packages ──────────────────────────────────────────────────────
+#
+# extra_packages = ["golang", "python3-pip"]
+
+# ── Owner ──────────────────────────────────────────────────────────────────────
+#
+# owner_name = "Your Name"
+# timezone   = "America/New_York"

@@ -1,0 +1,167 @@
+#!/bin/bash
+set -e
+
+LOG=/var/log/openclaw-install.log
+exec > >(tee -a "$LOG") 2>&1
+
+echo "[$(date)] Starting OpenClaw cloud-init..."
+
+# ── System Update & Base Packages ─────────────────────────────────────────────
+
+dnf update -y
+
+# Install Node.js 22
+curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+dnf install -y nodejs git jq openssl%{ if length(extra_packages) > 0 } ${join(" ", extra_packages)}%{ endif }
+
+echo "[$(date)] System packages installed."
+
+# ── Set Timezone ──────────────────────────────────────────────────────────────
+
+timedatectl set-timezone "${timezone}"
+
+# ── Create openclaw User (idempotent) ─────────────────────────────────────────
+
+id -u openclaw &>/dev/null || useradd -m -s /bin/bash openclaw
+
+# ── Install OpenClaw and Tools Globally ───────────────────────────────────────
+
+npm install -g openclaw clawhub agent-browser mcporter
+echo "[$(date)] OpenClaw and tools installed."
+
+# ── Directory Structure ───────────────────────────────────────────────────────
+
+mkdir -p /home/openclaw/.openclaw/agents/main/agent
+mkdir -p /home/openclaw/.openclaw/workspace/docs
+mkdir -p /home/openclaw/.openclaw/workspace/tools
+mkdir -p /home/openclaw/.openclaw/workspace/memory/daily
+mkdir -p /home/openclaw/.openclaw/workspace/scripts
+mkdir -p /home/openclaw/.config/systemd/user
+
+%{ if has_config ~}
+# ── Write OpenClaw Config ─────────────────────────────────────────────────────
+
+echo "${openclaw_config_json_b64}" | base64 -d > /tmp/openclaw-raw.json
+
+# Clean empty string values — prevents RangeError crash in OpenClaw config redaction
+jq 'walk(if type == "object" then with_entries(select(.value != "")) else . end)' \
+  /tmp/openclaw-raw.json > /home/openclaw/.openclaw/openclaw.json
+rm -f /tmp/openclaw-raw.json
+echo "[$(date)] OpenClaw config written."
+
+%{ endif ~}
+%{ if openclaw_env_b64 != "" ~}
+# ── Write .env File ───────────────────────────────────────────────────────────
+
+echo "${openclaw_env_b64}" | base64 -d > /home/openclaw/.openclaw/.env
+
+# Generate gateway token if missing or empty
+if ! grep -q "^GATEWAY_AUTH_TOKEN=." /home/openclaw/.openclaw/.env; then
+  TOKEN="$(openssl rand -hex 24)"
+  if grep -q "^GATEWAY_AUTH_TOKEN=" /home/openclaw/.openclaw/.env; then
+    sed -i "s/^GATEWAY_AUTH_TOKEN=.*/GATEWAY_AUTH_TOKEN=$${TOKEN}/" /home/openclaw/.openclaw/.env
+  else
+    echo "GATEWAY_AUTH_TOKEN=$${TOKEN}" >> /home/openclaw/.openclaw/.env
+  fi
+fi
+chmod 600 /home/openclaw/.openclaw/.env
+echo "[$(date)] .env file written."
+
+%{ endif ~}
+%{ if openclaw_auth_profiles_json_b64 != "" ~}
+# ── Write Auth Profiles ───────────────────────────────────────────────────────
+
+echo "${openclaw_auth_profiles_json_b64}" | base64 -d \
+  > /home/openclaw/.openclaw/agents/main/agent/auth-profiles.json
+chmod 600 /home/openclaw/.openclaw/agents/main/agent/auth-profiles.json
+echo "[$(date)] Auth profiles written."
+
+%{ endif ~}
+%{ if length(workspace_files_b64) > 0 ~}
+# ── Write Workspace Files ─────────────────────────────────────────────────────
+
+%{ for filename, content_b64 in workspace_files_b64 ~}
+echo "${content_b64}" | base64 -d > "/home/openclaw/.openclaw/workspace/${filename}"
+%{ endfor ~}
+echo "[$(date)] Workspace files written."
+
+%{ endif ~}
+%{ if owner_name != "" && !has_config ~}
+# ── Write USER.md from owner_name ─────────────────────────────────────────────
+
+cat > /home/openclaw/.openclaw/workspace/USER.md << 'USERMD'
+# User
+
+Name: ${owner_name}
+USERMD
+
+%{ endif ~}
+# ── Set Ownership ─────────────────────────────────────────────────────────────
+
+chown -R openclaw:openclaw /home/openclaw
+chown -R openclaw:openclaw /home/openclaw/.config
+
+# ── systemd User Service ──────────────────────────────────────────────────────
+
+# Enable linger so the user service starts at boot (no login required)
+loginctl enable-linger openclaw
+
+cat > /home/openclaw/.config/systemd/user/openclaw-gateway.service << 'SERVICE'
+[Unit]
+Description=OpenClaw Gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=/usr/bin/openclaw gateway start
+Restart=always
+RestartSec=10
+%{ if openclaw_env_b64 != "" ~}
+EnvironmentFile=%h/.openclaw/.env
+%{ endif ~}
+
+[Install]
+WantedBy=default.target
+SERVICE
+
+chown -R openclaw:openclaw /home/openclaw/.config
+
+# Set up runtime directory for systemd --user in this boot session
+OPENCLAW_UID="$(id -u openclaw)"
+mkdir -p "/run/user/$${OPENCLAW_UID}"
+chown openclaw:openclaw "/run/user/$${OPENCLAW_UID}"
+chmod 700 "/run/user/$${OPENCLAW_UID}"
+
+su - openclaw -c "XDG_RUNTIME_DIR=/run/user/$${OPENCLAW_UID} systemctl --user daemon-reload"
+su - openclaw -c "XDG_RUNTIME_DIR=/run/user/$${OPENCLAW_UID} systemctl --user enable openclaw-gateway"
+echo "[$(date)] systemd user service enabled."
+
+%{ if length(clawhub_skills) > 0 ~}
+# ── Install clawhub Skills ────────────────────────────────────────────────────
+
+%{ for skill in clawhub_skills ~}
+su - openclaw -c "clawhub install ${skill}" || echo "[WARN] Failed to install skill: ${skill}"
+%{ endfor ~}
+echo "[$(date)] clawhub skills installed."
+
+%{ endif ~}
+%{ if has_config ~}
+# ── Start Gateway ─────────────────────────────────────────────────────────────
+
+su - openclaw -c "XDG_RUNTIME_DIR=/run/user/$${OPENCLAW_UID} systemctl --user start openclaw-gateway"
+echo "[$(date)] OpenClaw gateway started."
+echo ""
+echo "OpenClaw is running! View logs:"
+echo "  sudo -u openclaw journalctl --user -u openclaw-gateway -f"
+
+%{ else ~}
+# ── Manual Onboard Prompt ─────────────────────────────────────────────────────
+
+echo ""
+echo "Ready! Connect via SSM and run:"
+echo "  sudo -u openclaw openclaw onboard --install-daemon"
+
+%{ endif ~}
+
+echo "[$(date)] OpenClaw cloud-init complete!"

@@ -26,3 +26,5 @@ Thumbs.db
 *.pem
 *.key
 secrets/
+openclaw-secrets.*
+openclaw-auth-profiles.json

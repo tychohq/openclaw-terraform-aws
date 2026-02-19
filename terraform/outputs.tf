@@ -1,4 +1,4 @@
-# Outputs - Minimal Deployment
+# Outputs
 
 output "instance_id" {
   description = "EC2 Instance ID"
@@ -16,7 +16,35 @@ output "connect_command" {
 }
 
 output "next_steps" {
-  value = <<-EOT
+  value = local.has_config ? <<-EOT
+
+    ╔════════════════════════════════════════════════════════════╗
+    ║          OPENCLAW IS DEPLOYED AND CONFIGURED!              ║
+    ╠════════════════════════════════════════════════════════════╣
+    ║                                                            ║
+    ║  OpenClaw was pre-configured and is starting up now.       ║
+    ║  Allow ~2 min for cloud-init to complete.                  ║
+    ║                                                            ║
+    ║  1. Check install progress:                                ║
+    ║                                                            ║
+    ║     aws ssm start-session --target ${aws_instance.openclaw.id} --region ${var.aws_region}
+    ║     tail -f /var/log/openclaw-install.log                  ║
+    ║                                                            ║
+    ║  2. View gateway logs:                                     ║
+    ║                                                            ║
+    ║     sudo -u openclaw journalctl --user -u openclaw-gateway -f
+    ║                                                            ║
+    ║  3. Open dashboard via SSM port forward:                   ║
+    ║                                                            ║
+    ║     aws ssm start-session --target ${aws_instance.openclaw.id} --region ${var.aws_region} \
+    ║       --document-name AWS-StartPortForwardingSession \
+    ║       --parameters '{"portNumber":["18789"],"localPortNumber":["18789"]}'
+    ║                                                            ║
+    ║     http://localhost:18789/                                ║
+    ║                                                            ║
+    ╚════════════════════════════════════════════════════════════╝
+  EOT
+  : <<-EOT
 
     ╔════════════════════════════════════════════════════════════╗
     ║                   SETUP COMPLETE! 🎉                       ║
@@ -38,8 +66,6 @@ output "next_steps" {
     ║                                                            ║
     ║     http://localhost:18789/                                ║
     ║     Token: sudo -u openclaw openclaw config get gateway.auth.token ║
-    ║                                                            ║
-    ║  4. Message your bot!                                      ║
     ║                                                            ║
     ╚════════════════════════════════════════════════════════════╝
   EOT
