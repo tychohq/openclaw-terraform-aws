@@ -1,22 +1,7 @@
 # Outputs
 
-output "instance_id" {
-  description = "EC2 Instance ID"
-  value       = aws_instance.openclaw.id
-}
-
-output "public_ip" {
-  description = "Public IP (may change on restart)"
-  value       = aws_instance.openclaw.public_ip
-}
-
-output "connect_command" {
-  description = "Connect via SSM"
-  value       = "aws ssm start-session --target ${aws_instance.openclaw.id} --region ${var.aws_region}"
-}
-
-output "next_steps" {
-  value = local.has_config ? <<-EOT
+locals {
+  _next_steps_configured = <<-EOT
 
     ╔════════════════════════════════════════════════════════════╗
     ║          OPENCLAW IS DEPLOYED AND CONFIGURED!              ║
@@ -44,7 +29,8 @@ output "next_steps" {
     ║                                                            ║
     ╚════════════════════════════════════════════════════════════╝
   EOT
-  : <<-EOT
+
+  _next_steps_manual = <<-EOT
 
     ╔════════════════════════════════════════════════════════════╗
     ║                   SETUP COMPLETE! 🎉                       ║
@@ -69,4 +55,23 @@ output "next_steps" {
     ║                                                            ║
     ╚════════════════════════════════════════════════════════════╝
   EOT
+}
+
+output "instance_id" {
+  description = "EC2 Instance ID"
+  value       = aws_instance.openclaw.id
+}
+
+output "public_ip" {
+  description = "Public IP (may change on restart)"
+  value       = aws_instance.openclaw.public_ip
+}
+
+output "connect_command" {
+  description = "Connect via SSM"
+  value       = "aws ssm start-session --target ${aws_instance.openclaw.id} --region ${var.aws_region}"
+}
+
+output "next_steps" {
+  value = local.has_config ? local._next_steps_configured : local._next_steps_manual
 }
