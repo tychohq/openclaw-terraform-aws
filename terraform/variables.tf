@@ -56,10 +56,30 @@ variable "openclaw_auth_profiles_json" {
 }
 
 # ── Workspace Seed Files ───────────────────────────────────────────────────────
-# Map of filename → content for workspace root files
+# Map of file path → content. Supports subdirectories (e.g. "docs/openclaw-playbook.md").
+# Parent directories are created automatically.
 
 variable "workspace_files" {
-  description = "Map of workspace files to create (e.g. {\"SOUL.md\" = \"...\", \"USER.md\" = \"...\"})"
+  description = "Map of workspace file paths to contents (e.g. {\"SOUL.md\" = \"...\", \"docs/openclaw-playbook.md\" = \"...\"})"
+  type        = map(string)
+  default     = {}
+}
+
+# ── Custom Skills ─────────────────────────────────────────────────────────────
+# Skill directories placed at ~/.openclaw/skills/<skill-name>/
+# Each skill is a map of file paths to contents (supports nested paths like scripts/check.sh)
+
+variable "custom_skills" {
+  description = "Map of custom skill name to map of file paths and contents. E.g. {\"email\" = {\"SKILL.md\" = \"...\", \"scripts/check.sh\" = \"...\"}}"
+  type        = map(map(string))
+  default     = {}
+}
+
+# ── Cron Jobs ──────────────────────────────────────────────────────────────────
+# Written to ~/.openclaw/workspace/cron-jobs/<name>.json for manual registration
+
+variable "cron_jobs" {
+  description = "Map of cron job name to JSON content. Written to ~/.openclaw/workspace/cron-jobs/ for manual registration via OpenClaw."
   type        = map(string)
   default     = {}
 }

@@ -51,6 +51,8 @@ resource "aws_instance" "openclaw" {
     openclaw_env_b64                = var.openclaw_env != "" ? base64encode(var.openclaw_env) : ""
     openclaw_auth_profiles_json_b64 = var.openclaw_auth_profiles_json != "" ? base64encode(var.openclaw_auth_profiles_json) : ""
     workspace_files_b64             = { for k, v in var.workspace_files : k => base64encode(v) }
+    custom_skills_b64               = { for skill_name, skill_files in var.custom_skills : skill_name => { for filepath, content in skill_files : filepath => base64encode(content) } }
+    cron_jobs_b64                   = { for name, content in var.cron_jobs : name => base64encode(content) }
     clawhub_skills                  = var.clawhub_skills
     extra_packages                  = var.extra_packages
     owner_name                      = var.owner_name

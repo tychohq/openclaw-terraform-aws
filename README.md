@@ -101,20 +101,74 @@ Cloud-init runs automatically on first boot. After ~2 minutes, OpenClaw is runni
 
 ### Workspace Files
 
-Pre-populate the OpenClaw workspace with your identity and soul files:
+Pre-populate the OpenClaw workspace with your identity and soul files. Supports nested paths — parent directories are created automatically:
 
 ```hcl
 workspace_files = {
+  # Root-level files
   "SOUL.md"     = file("../openclaw-workspace/SOUL.md")
   "USER.md"     = file("../openclaw-workspace/USER.md")
   "AGENTS.md"   = file("../openclaw-workspace/AGENTS.md")
   "IDENTITY.md" = file("../openclaw-workspace/IDENTITY.md")
   "TOOLS.md"    = file("../openclaw-workspace/TOOLS.md")
   "MEMORY.md"   = file("../openclaw-workspace/MEMORY.md")
+  # Subdirectory files
+  "docs/openclaw-playbook.md"     = file("../openclaw-workspace/docs/openclaw-playbook.md")
+  "tools/browser.md"              = file("../openclaw-workspace/tools/browser.md")
+  "scripts/pre-commit-secrets.sh" = file("../openclaw-workspace/scripts/pre-commit-secrets.sh")
+  "bootstrap/README.md"           = file("../openclaw-workspace/bootstrap/README.md")
 }
 ```
 
 Files are written to `/home/openclaw/.openclaw/workspace/` on the instance.
+
+If `scripts/pre-commit-secrets.sh` is included, it is automatically installed as the git pre-commit hook for the `~/.openclaw` repo (see [Pre-commit Hook](#pre-commit-hook) below).
+
+### Custom Skills
+
+Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of file paths to contents, supporting nested paths (e.g. `scripts/check.sh`, `references/threat-model.md`). Reference your `openclaw-skills/` folder from mac-mini-setup:
+
+```hcl
+custom_skills = {
+  "email" = {
+    "SKILL.md"         = file("../openclaw-skills/email/SKILL.md")
+    "SETUP.md"         = file("../openclaw-skills/email/SETUP.md")
+    "scripts/check.sh" = file("../openclaw-skills/email/scripts/check.sh")
+  }
+  "browser-tools" = {
+    "SKILL.md"                   = file("../openclaw-skills/browser-tools/SKILL.md")
+    "references/threat-model.md" = file("../openclaw-skills/browser-tools/references/threat-model.md")
+  }
+}
+```
+
+Skills land at `/home/openclaw/.openclaw/skills/<skill-name>/` on the instance.
+
+### Cron Jobs
+
+Write cron job JSON specs to `~/.openclaw/workspace/cron-jobs/`. After the instance is up, ask OpenClaw to register them:
+
+```hcl
+cron_jobs = {
+  "daily-digest"  = file("../openclaw-cron/daily-digest.json")
+  "weekly-report" = file("../openclaw-cron/weekly-report.json")
+}
+```
+
+Files are written as `cron-jobs/<name>.json`. To register after deploy:
+
+```
+"Please register the cron jobs in ~/.openclaw/workspace/cron-jobs/"
+```
+
+### Pre-commit Hook
+
+If `workspace_files` includes `scripts/pre-commit-secrets.sh`, cloud-init will:
+
+1. Initialize `~/.openclaw` as a git repo (if not already)
+2. Install the script as `.git/hooks/pre-commit`
+
+This mirrors the mac-mini-setup pre-commit secrets guard on the cloud instance.
 
 ### Skills
 

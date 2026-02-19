@@ -27,15 +27,62 @@ environment = "prod"
 # ── Workspace Seed Files ───────────────────────────────────────────────────────
 #
 # Pre-populate the OpenClaw workspace with your identity/soul/agent files.
+# Supports nested paths — parent directories are created automatically.
 # Uses the same openclaw-workspace/ folder from mac-mini-setup.
 #
 # workspace_files = {
+#   # Root-level files
 #   "SOUL.md"     = file("../openclaw-workspace/SOUL.md")
 #   "USER.md"     = file("../openclaw-workspace/USER.md")
 #   "AGENTS.md"   = file("../openclaw-workspace/AGENTS.md")
 #   "IDENTITY.md" = file("../openclaw-workspace/IDENTITY.md")
 #   "TOOLS.md"    = file("../openclaw-workspace/TOOLS.md")
 #   "MEMORY.md"   = file("../openclaw-workspace/MEMORY.md")
+#   # Subdirectory files
+#   "docs/openclaw-playbook.md"       = file("../openclaw-workspace/docs/openclaw-playbook.md")
+#   "docs/doc-layers.md"              = file("../openclaw-workspace/docs/doc-layers.md")
+#   "tools/browser.md"                = file("../openclaw-workspace/tools/browser.md")
+#   "tools/discord.md"                = file("../openclaw-workspace/tools/discord.md")
+#   "tools/docker.md"                 = file("../openclaw-workspace/tools/docker.md")
+#   "tools/pdf.md"                    = file("../openclaw-workspace/tools/pdf.md")
+#   "tools/uv-python.md"              = file("../openclaw-workspace/tools/uv-python.md")
+#   "tools/async-polling.md"          = file("../openclaw-workspace/tools/async-polling.md")
+#   "scripts/error-digest.sh"         = file("../openclaw-workspace/scripts/error-digest.sh")
+#   "scripts/md2pdf.sh"               = file("../openclaw-workspace/scripts/md2pdf.sh")
+#   "scripts/pre-commit-secrets.sh"   = file("../openclaw-workspace/scripts/pre-commit-secrets.sh")
+#   "bootstrap/discord-setup.md"      = file("../openclaw-workspace/bootstrap/discord-setup.md")
+#   "bootstrap/README.md"             = file("../openclaw-workspace/bootstrap/README.md")
+#   "bootstrap/secrets-guide.md"      = file("../openclaw-workspace/bootstrap/secrets-guide.md")
+#   "bootstrap/setup-context.md"      = file("../openclaw-workspace/bootstrap/setup-context.md")
+#   "bootstrap/TODO.md"               = file("../openclaw-workspace/bootstrap/TODO.md")
+# }
+
+# ── Custom Skills ──────────────────────────────────────────────────────────────
+#
+# Deploy custom skill directories to ~/.openclaw/skills/<skill-name>/.
+# Each skill is a map of file paths to contents — supports nested paths.
+# Reference your openclaw-skills/ folder from mac-mini-setup.
+#
+# custom_skills = {
+#   "email" = {
+#     "SKILL.md"          = file("../openclaw-skills/email/SKILL.md")
+#     "SETUP.md"          = file("../openclaw-skills/email/SETUP.md")
+#     "scripts/check.sh"  = file("../openclaw-skills/email/scripts/check.sh")
+#   }
+#   "browser-tools" = {
+#     "SKILL.md"                        = file("../openclaw-skills/browser-tools/SKILL.md")
+#     "references/threat-model.md"      = file("../openclaw-skills/browser-tools/references/threat-model.md")
+#   }
+# }
+
+# ── Cron Jobs ──────────────────────────────────────────────────────────────────
+#
+# Write cron job JSON specs to ~/.openclaw/workspace/cron-jobs/.
+# After deploy, ask OpenClaw to register them from that directory.
+#
+# cron_jobs = {
+#   "daily-digest"   = file("../openclaw-cron/daily-digest.json")
+#   "weekly-report"  = file("../openclaw-cron/weekly-report.json")
 # }
 
 # ── Skills ─────────────────────────────────────────────────────────────────────

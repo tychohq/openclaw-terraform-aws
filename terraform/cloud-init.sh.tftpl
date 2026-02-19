@@ -36,6 +36,7 @@ mkdir -p /home/openclaw/.openclaw/workspace/docs
 mkdir -p /home/openclaw/.openclaw/workspace/tools
 mkdir -p /home/openclaw/.openclaw/workspace/memory/daily
 mkdir -p /home/openclaw/.openclaw/workspace/scripts
+mkdir -p /home/openclaw/.openclaw/skills
 mkdir -p /home/openclaw/.config/systemd/user
 
 %{ if has_config ~}
@@ -80,10 +81,36 @@ echo "[$(date)] Auth profiles written."
 %{ if length(workspace_files_b64) > 0 ~}
 # ── Write Workspace Files ─────────────────────────────────────────────────────
 
-%{ for filename, content_b64 in workspace_files_b64 ~}
-echo "${content_b64}" | base64 -d > "/home/openclaw/.openclaw/workspace/${filename}"
+%{ for filepath, content_b64 in workspace_files_b64 ~}
+mkdir -p "/home/openclaw/.openclaw/workspace/${dirname(filepath)}"
+echo "${content_b64}" | base64 -d > "/home/openclaw/.openclaw/workspace/${filepath}"
 %{ endfor ~}
 echo "[$(date)] Workspace files written."
+
+%{ endif ~}
+%{ if length(custom_skills_b64) > 0 ~}
+# ── Write Custom Skills ───────────────────────────────────────────────────────
+
+%{ for skill_name, skill_files in custom_skills_b64 ~}
+mkdir -p "/home/openclaw/.openclaw/skills/${skill_name}"
+%{ for filepath, content_b64 in skill_files ~}
+mkdir -p "/home/openclaw/.openclaw/skills/${skill_name}/${dirname(filepath)}"
+echo "${content_b64}" | base64 -d > "/home/openclaw/.openclaw/skills/${skill_name}/${filepath}"
+%{ endfor ~}
+%{ endfor ~}
+echo "[$(date)] Custom skills written."
+
+%{ endif ~}
+%{ if length(cron_jobs_b64) > 0 ~}
+# ── Write Cron Job Files ──────────────────────────────────────────────────────
+
+mkdir -p /home/openclaw/.openclaw/workspace/cron-jobs
+
+%{ for job_name, content_b64 in cron_jobs_b64 ~}
+echo "${content_b64}" | base64 -d > "/home/openclaw/.openclaw/workspace/cron-jobs/${job_name}.json"
+%{ endfor ~}
+echo "[$(date)] Cron job files written."
+echo "  NOTE: To register cron jobs, ask OpenClaw to register the files in ~/.openclaw/workspace/cron-jobs/"
 
 %{ endif ~}
 %{ if owner_name != "" && !has_config ~}
@@ -96,6 +123,20 @@ Name: ${owner_name}
 USERMD
 
 %{ endif ~}
+# ── Initialize .openclaw as Git Repo ─────────────────────────────────────────
+
+if [ ! -d /home/openclaw/.openclaw/.git ]; then
+  su - openclaw -c 'git config --global user.email "openclaw@localhost" && git config --global user.name "OpenClaw" && cd ~/.openclaw && git init && git add -A && git commit -m "Initial workspace"'
+fi
+
+# Install pre-commit hook if the script exists
+if [ -f /home/openclaw/.openclaw/workspace/scripts/pre-commit-secrets.sh ]; then
+  cp /home/openclaw/.openclaw/workspace/scripts/pre-commit-secrets.sh \
+    /home/openclaw/.openclaw/.git/hooks/pre-commit
+  chmod +x /home/openclaw/.openclaw/.git/hooks/pre-commit
+  echo "[$(date)] Pre-commit hook installed."
+fi
+
 # ── Set Ownership ─────────────────────────────────────────────────────────────
 
 chown -R openclaw:openclaw /home/openclaw
