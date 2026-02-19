@@ -19,9 +19,9 @@ variable "project_name" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
+  description = "EC2 instance type (t4g.medium recommended for browser automation)"
   type        = string
-  default     = "t4g.small"
+  default     = "t4g.medium"
 }
 
 variable "ebs_volume_size" {

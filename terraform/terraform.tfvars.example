@@ -43,7 +43,7 @@ environment = "prod"
 
 # ── Instance ───────────────────────────────────────────────────────────────────
 
-instance_type   = "t4g.small"
+instance_type   = "t4g.medium"
 ebs_volume_size = 30
 
 # ── Owner ──────────────────────────────────────────────────────────────────────

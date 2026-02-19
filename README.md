@@ -4,12 +4,12 @@ One command to deploy OpenClaw on AWS — either as a blank instance you configu
 
 ## Cost (On-Demand, eu-central-1)
 
-- EC2 t4g.small (Linux, Shared): $0.0192 per hour
-	- 730 hours/month: $0.0192 x 730 = ~$14.02
+- EC2 t4g.medium (2 vCPU, 4 GB RAM): $0.0336 per hour
+	- 730 hours/month: $0.0336 x 730 = ~$24.53
 - EBS gp3 storage (30 GB): $0.0952 per GB-month
 	- 30 GB: $0.0952 x 30 = ~$2.86
 
-Estimated monthly total: ~$16.88 (~$17/month)
+Estimated monthly total: ~$27.39 (~$27/month)
 
 Excludes data transfer, snapshots, and any optional add-ons. Always review the latest AWS pricing for your region.
 Pricing varies by region and instance size; adjust `instance_type` and `ebs_volume_size` in [terraform/variables.tf](terraform/variables.tf).
