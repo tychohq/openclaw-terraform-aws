@@ -58,9 +58,29 @@ aws configure
 
 Deploy OpenClaw fully configured at boot — no manual `openclaw onboard` needed. All config, workspace files, and skills come from the companion [mac-mini-setup](https://github.com/openclaw/mac-mini-setup) repo. This repo contains only Terraform infrastructure files.
 
-### Sibling Repo Layout
+### Two Ways to Source Content
 
-Both repos must be cloned as siblings under `~/projects/`:
+**Option A: Local clone (recommended for customization)**
+Clone mac-mini-setup locally, fill in secrets, reference with `file()`.
+
+**Option B: Fetch from GitHub (no clone needed)**
+Since mac-mini-setup is public, Terraform can read files directly from GitHub raw URLs. You only need to clone *this* repo — workspace files, skills, and cron jobs are fetched at plan time:
+
+```hcl
+# terraform.tfvars — pull non-secret files straight from GitHub
+workspace_files = {
+  "SOUL.md"  = "https://raw.githubusercontent.com/BrennerSpear/mac-mini-setup/main/openclaw-workspace/SOUL.md"
+  "USER.md"  = "https://raw.githubusercontent.com/BrennerSpear/mac-mini-setup/main/openclaw-workspace/USER.md"
+}
+```
+
+> **Note:** This requires adding an `http` data source in Terraform to fetch each URL — or you can use the simpler approach of just curling the files into local copies and using `file()`. See the tfvars example for both patterns.
+
+Secrets (API keys, tokens) should never come from GitHub — always pass those via local `file()` references or environment variables.
+
+### Sibling Repo Layout (Option A)
+
+Both repos cloned as siblings under `~/projects/`:
 
 ```
 ~/projects/
@@ -182,14 +202,12 @@ Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of
 ```hcl
 custom_skills = {
   "email" = {
-    "SKILL.md"         = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
-    "SETUP.md"         = file("../../mac-mini-setup/openclaw-skills/email/SETUP.md")
-    "scripts/check.sh" = file("../../mac-mini-setup/openclaw-skills/email/scripts/check.sh")
+    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
   }
   "clawdstrike" = {
-    "SKILL.md"                         = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
-    "references/detection-patterns.md" = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/detection-patterns.md")
-    "scripts/scan.sh"                  = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/scan.sh")
+    "SKILL.md"                    = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
+    "references/threat-model.md"  = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/threat-model.md")
+    "scripts/collect_verified.sh" = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/collect_verified.sh")
   }
 }
 ```

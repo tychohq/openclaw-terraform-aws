@@ -114,11 +114,26 @@ custom_skills = {
   }
 
   "clawdstrike" = {
-    "SKILL.md"                         = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
-    "references/detection-patterns.md" = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/detection-patterns.md")
-    "references/response-playbook.md"  = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/response-playbook.md")
-    "scripts/scan.sh"                  = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/scan.sh")
-    "scripts/alert.sh"                 = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/alert.sh")
+    "SKILL.md"                              = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
+    "references/canvas-browser.md"          = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/canvas-browser.md")
+    "references/channels.md"                = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/channels.md")
+    "references/config-keys.md"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/config-keys.md")
+    "references/discovery.md"               = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/discovery.md")
+    "references/evidence-template.md"       = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/evidence-template.md")
+    "references/filesystem.md"              = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/filesystem.md")
+    "references/gateway.md"                 = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/gateway.md")
+    "references/network.md"                 = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/network.md")
+    "references/redaction.md"               = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/redaction.md")
+    "references/report-format.md"           = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/report-format.md")
+    "references/required-checks.md"         = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/required-checks.md")
+    "references/supply-chain.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/supply-chain.md")
+    "references/threat-model.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/threat-model.md")
+    "references/tools.md"                   = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/tools.md")
+    "references/verified-allowlist.md"      = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/verified-allowlist.md")
+    "references/version-risk.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/version-risk.md")
+    "scripts/collect_verified.sh"           = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/collect_verified.sh")
+    "scripts/config_summary.py"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/config_summary.py")
+    "scripts/redact_helpers.sh"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/redact_helpers.sh")
   }
 
   "cron-setup" = {
@@ -130,22 +145,22 @@ custom_skills = {
   }
 
   "email" = {
-    "SKILL.md"         = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
-    "SETUP.md"         = file("../../mac-mini-setup/openclaw-skills/email/SETUP.md")
-    "scripts/check.sh" = file("../../mac-mini-setup/openclaw-skills/email/scripts/check.sh")
+    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
   }
 
   "gog" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/gog/SKILL.md")
+    "SKILL.md"  = file("../../mac-mini-setup/openclaw-skills/gog/SKILL.md")
+    "SETUP.md"  = file("../../mac-mini-setup/openclaw-skills/gog/SETUP.md")
   }
 
   "self-reflection" = {
-    "SKILL.md"           = file("../../mac-mini-setup/openclaw-skills/self-reflection/SKILL.md")
-    "scripts/reflect.sh" = file("../../mac-mini-setup/openclaw-skills/self-reflection/scripts/reflect.sh")
+    "SKILL.md"                      = file("../../mac-mini-setup/openclaw-skills/self-reflection/SKILL.md")
+    "scripts/summarize-sessions.sh" = file("../../mac-mini-setup/openclaw-skills/self-reflection/scripts/summarize-sessions.sh")
   }
 
   "system-watchdog" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/system-watchdog/SKILL.md")
+    "SKILL.md"  = file("../../mac-mini-setup/openclaw-skills/system-watchdog/SKILL.md")
+    "check.sh"  = file("../../mac-mini-setup/openclaw-skills/system-watchdog/check.sh")
   }
 }
 
@@ -156,10 +171,11 @@ custom_skills = {
 #   "Please register the cron jobs in ~/.openclaw/workspace/cron-jobs/"
 
 cron_jobs = {
-  "daily-digest"    = file("../../mac-mini-setup/cron-jobs/daily-digest.json")
-  "weekly-report"   = file("../../mac-mini-setup/cron-jobs/weekly-report.json")
-  "error-digest"    = file("../../mac-mini-setup/cron-jobs/error-digest.json")
-  "self-reflection" = file("../../mac-mini-setup/cron-jobs/self-reflection.json")
+  "self-reflection"       = file("../../mac-mini-setup/cron-jobs/self-reflection.json")
+  "system-watchdog"       = file("../../mac-mini-setup/cron-jobs/system-watchdog.json")
+  "daily-workspace-commit" = file("../../mac-mini-setup/cron-jobs/daily-workspace-commit.json")
+  "error-log-digest"      = file("../../mac-mini-setup/cron-jobs/error-log-digest.json")
+  "cron-health-watchdog"  = file("../../mac-mini-setup/cron-jobs/cron-health-watchdog.json")
 }
 
 # ── Skills ─────────────────────────────────────────────────────────────────────
@@ -169,20 +185,23 @@ cron_jobs = {
 
 clawhub_skills = [
   "agent-browser",
-  "research",
+  "architecture-research",
+  "caddy",
   "commit",
-  "diagrams",
-  "github",
-  "pdf",
-  "supabase",
-  "modal",
-  "vercel",
-  "process-brain-dump",
-  "new-brain-dump",
-  "merge-upstream",
   "create-mcp",
   "deslop",
+  "dev-serve",
+  "diagrams",
+  "domain-check",
+  "merge-upstream",
+  "modal",
+  "new-brain-dump",
+  "process-brain-dump",
+  "research",
+  "supabase",
+  "tmux",
   "ui-scaffold",
+  "vercel",
 ]
 
 # ── Extra System Packages ──────────────────────────────────────────────────────
