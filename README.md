@@ -56,48 +56,105 @@ aws configure
 
 ## Pre-Configured Deployment
 
-Deploy OpenClaw fully configured at boot — no manual `openclaw onboard` needed. This uses the same config artifacts as the mac-mini-setup repo, so you can share a single set of config files across both deployments.
+Deploy OpenClaw fully configured at boot — no manual `openclaw onboard` needed. All config, workspace files, and skills come from the companion [mac-mini-setup](https://github.com/openclaw/mac-mini-setup) repo. This repo contains only Terraform infrastructure files.
 
-### Shared Config with mac-mini-setup
+### Sibling Repo Layout
 
-Both this repo and mac-mini-setup consume the **same three config files**:
+Both repos must be cloned as siblings under `~/projects/`:
 
-| File | Purpose | Destination on instance |
-|------|---------|------------------------|
-| `openclaw-secrets.json` | Full OpenClaw config (channels, models, agents, gateway, skills) | `~/.openclaw/openclaw.json` |
-| `openclaw-secrets.env` | API keys and channel tokens as env vars | `~/.openclaw/.env` |
-| `openclaw-auth-profiles.json` | Provider auth profiles with API keys | `~/.openclaw/agents/main/agent/auth-profiles.json` |
+```
+~/projects/
+├── mac-mini-setup/                       # Source of truth for all OpenClaw content
+│   ├── openclaw-secrets.json             # ← fill in (from config/openclaw-config.template.json)
+│   ├── openclaw-secrets.env              # ← fill in (from config/openclaw-env.template)
+│   ├── openclaw-auth-profiles.json       # ← fill in (from config/openclaw-auth-profiles.template.json)
+│   ├── openclaw-workspace/               # workspace files (SOUL.md, USER.md, docs/, tools/, ...)
+│   ├── openclaw-skills/                  # custom skills (email/, clawdstrike/, ...)
+│   └── cron-jobs/                        # cron job JSON specs
+└── openclaw-terraform-aws/               # this repo (Terraform only — no content)
+    └── terraform/
+        └── terraform.tfvars              # all file() paths point into ../../mac-mini-setup/
+```
 
-Fill in your copies of these files once and reference them from both repos.
+`mac-mini-setup` is the single source of truth. The `terraform.tfvars` wires it to the instance using `file()` references — no content lives in this repo.
 
-### Setup
+### Workflow
 
-1. Copy the example tfvars:
-   ```bash
-   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-   ```
+**1. Clone both repos:**
 
-2. Edit `terraform/terraform.tfvars` to reference your filled-in config files:
-   ```hcl
-   openclaw_config_json        = file("../openclaw-secrets.json")
-   openclaw_env                = file("../openclaw-secrets.env")
-   openclaw_auth_profiles_json = file("../openclaw-auth-profiles.json")
-   ```
+```bash
+cd ~/projects
+git clone https://github.com/openclaw/mac-mini-setup.git
+git clone https://github.com/janobarnard/openclaw-aws.git openclaw-terraform-aws
+```
 
-3. Deploy:
-   ```bash
-   cd terraform && terraform init && terraform apply
-   ```
+**2. Fill in your secrets (in mac-mini-setup):**
+
+```bash
+cd ~/projects/mac-mini-setup
+# Start from the templates, then fill in your tokens and API keys:
+cp config/openclaw-config.template.json openclaw-secrets.json
+cp config/openclaw-env.template          openclaw-secrets.env
+cp config/openclaw-auth-profiles.template.json openclaw-auth-profiles.json
+
+# Edit each file:
+#   openclaw-secrets.json       — channels, models, agent settings, gateway config
+#   openclaw-secrets.env        — API keys (ANTHROPIC_API_KEY, TELEGRAM_TOKEN, ...)
+#   openclaw-auth-profiles.json — provider auth profiles
+```
+
+These three files are gitignored in mac-mini-setup and never committed.
+
+**3. Configure Terraform:**
+
+```bash
+cd ~/projects/openclaw-terraform-aws/terraform
+cp terraform.tfvars.example terraform.tfvars
+# All file() paths already point to ../../mac-mini-setup/
+# Edit owner_name, timezone, region, or skill lists as needed.
+```
+
+**4. Deploy:**
+
+```bash
+terraform init && terraform apply
+```
 
 Cloud-init runs automatically on first boot. After ~2 minutes, OpenClaw is running as a systemd user service.
 
+### Updating Config and Content
+
+**To update workspace files, skills, cron jobs, or config:**
+
+1. Edit the relevant files in `mac-mini-setup/`
+2. Re-run `terraform apply` from `openclaw-terraform-aws/terraform/`
+
+When `workspace_files`, `custom_skills`, `cron_jobs`, or the config variables change, Terraform detects a `user_data` change and **replaces the instance**. Your updated content is baked in at boot on the new instance.
+
+**For config-only changes without instance replacement** (secrets rotation, small tweaks):
+
+SSM in and update the files directly:
+
+```bash
+aws ssm start-session --target <instance-id> --region <region>
+
+# Edit config:
+sudo -u openclaw vi ~/.openclaw/openclaw.json
+
+# Update .env (API keys):
+sudo -u openclaw vi ~/.openclaw/.env
+sudo -u openclaw systemctl --user restart openclaw-gateway
+```
+
+Use `terraform apply` (instance replacement) for any change you want to survive a full rebuild. Use SSM for quick, ephemeral edits.
+
 ### Config Files
 
-**`openclaw-secrets.json`** — The main OpenClaw config. Use `config/openclaw-config.template.json` from mac-mini-setup as your starting point. Fill in your channel tokens, model preferences, agent settings, and gateway config.
-
-**`openclaw-secrets.env`** — API keys and tokens as shell environment variables. Use `config/openclaw-env.template` from mac-mini-setup. This file gets `chmod 600` on the instance.
-
-**`openclaw-auth-profiles.json`** — Provider auth profiles used by OpenClaw's agent subsystem. Use `config/openclaw-auth-profiles.template.json` from mac-mini-setup. Also `chmod 600` on the instance.
+| File | Template in mac-mini-setup | Destination on instance |
+|------|---------------------------|------------------------|
+| `openclaw-secrets.json` | `config/openclaw-config.template.json` | `~/.openclaw/openclaw.json` |
+| `openclaw-secrets.env` | `config/openclaw-env.template` | `~/.openclaw/.env` (chmod 600) |
+| `openclaw-auth-profiles.json` | `config/openclaw-auth-profiles.template.json` | `~/.openclaw/agents/main/agent/auth-profiles.json` (chmod 600) |
 
 ### Workspace Files
 
@@ -105,44 +162,39 @@ Pre-populate the OpenClaw workspace with your identity and soul files. Supports 
 
 ```hcl
 workspace_files = {
-  # Root-level files
-  "SOUL.md"     = file("../openclaw-workspace/SOUL.md")
-  "USER.md"     = file("../openclaw-workspace/USER.md")
-  "AGENTS.md"   = file("../openclaw-workspace/AGENTS.md")
-  "IDENTITY.md" = file("../openclaw-workspace/IDENTITY.md")
-  "TOOLS.md"    = file("../openclaw-workspace/TOOLS.md")
-  "MEMORY.md"   = file("../openclaw-workspace/MEMORY.md")
-  # Subdirectory files
-  "docs/openclaw-playbook.md"     = file("../openclaw-workspace/docs/openclaw-playbook.md")
-  "tools/browser.md"              = file("../openclaw-workspace/tools/browser.md")
-  "scripts/pre-commit-secrets.sh" = file("../openclaw-workspace/scripts/pre-commit-secrets.sh")
-  "bootstrap/README.md"           = file("../openclaw-workspace/bootstrap/README.md")
+  "SOUL.md"                      = file("../../mac-mini-setup/openclaw-workspace/SOUL.md")
+  "USER.md"                      = file("../../mac-mini-setup/openclaw-workspace/USER.md")
+  "docs/openclaw-playbook.md"    = file("../../mac-mini-setup/openclaw-workspace/docs/openclaw-playbook.md")
+  "tools/browser.md"             = file("../../mac-mini-setup/openclaw-workspace/tools/browser.md")
+  "scripts/pre-commit-secrets.sh" = file("../../mac-mini-setup/openclaw-workspace/scripts/pre-commit-secrets.sh")
+  "bootstrap/README.md"          = file("../../mac-mini-setup/openclaw-workspace/bootstrap/README.md")
 }
 ```
 
-Files are written to `/home/openclaw/.openclaw/workspace/` on the instance.
+Files are written to `/home/openclaw/.openclaw/workspace/` on the instance. See `terraform.tfvars.example` for the complete list.
 
 If `scripts/pre-commit-secrets.sh` is included, it is automatically installed as the git pre-commit hook for the `~/.openclaw` repo (see [Pre-commit Hook](#pre-commit-hook) below).
 
 ### Custom Skills
 
-Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of file paths to contents, supporting nested paths (e.g. `scripts/check.sh`, `references/threat-model.md`). Reference your `openclaw-skills/` folder from mac-mini-setup:
+Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of file paths to contents, supporting nested paths (e.g. `scripts/check.sh`, `references/response-playbook.md`):
 
 ```hcl
 custom_skills = {
   "email" = {
-    "SKILL.md"         = file("../openclaw-skills/email/SKILL.md")
-    "SETUP.md"         = file("../openclaw-skills/email/SETUP.md")
-    "scripts/check.sh" = file("../openclaw-skills/email/scripts/check.sh")
+    "SKILL.md"         = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
+    "SETUP.md"         = file("../../mac-mini-setup/openclaw-skills/email/SETUP.md")
+    "scripts/check.sh" = file("../../mac-mini-setup/openclaw-skills/email/scripts/check.sh")
   }
-  "browser-tools" = {
-    "SKILL.md"                   = file("../openclaw-skills/browser-tools/SKILL.md")
-    "references/threat-model.md" = file("../openclaw-skills/browser-tools/references/threat-model.md")
+  "clawdstrike" = {
+    "SKILL.md"                         = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
+    "references/detection-patterns.md" = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/detection-patterns.md")
+    "scripts/scan.sh"                  = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/scan.sh")
   }
 }
 ```
 
-Skills land at `/home/openclaw/.openclaw/skills/<skill-name>/` on the instance.
+Skills land at `/home/openclaw/.openclaw/skills/<skill-name>/` on the instance. See `terraform.tfvars.example` for all skills.
 
 ### Cron Jobs
 
@@ -150,12 +202,12 @@ Write cron job JSON specs to `~/.openclaw/workspace/cron-jobs/`. After the insta
 
 ```hcl
 cron_jobs = {
-  "daily-digest"  = file("../openclaw-cron/daily-digest.json")
-  "weekly-report" = file("../openclaw-cron/weekly-report.json")
+  "daily-digest"   = file("../../mac-mini-setup/cron-jobs/daily-digest.json")
+  "weekly-report"  = file("../../mac-mini-setup/cron-jobs/weekly-report.json")
 }
 ```
 
-Files are written as `cron-jobs/<name>.json`. To register after deploy:
+To register after deploy:
 
 ```
 "Please register the cron jobs in ~/.openclaw/workspace/cron-jobs/"
@@ -172,7 +224,7 @@ This mirrors the mac-mini-setup pre-commit secrets guard on the cloud instance.
 
 ### Skills
 
-Pre-install clawhub skills at boot:
+Pre-install clawhub skills at boot (match this to `bootstrap-openclaw-workspace.sh` in mac-mini-setup):
 
 ```hcl
 clawhub_skills = [
@@ -189,7 +241,7 @@ clawhub_skills = [
 Install additional system packages via dnf:
 
 ```hcl
-extra_packages = ["golang", "python3-pip"]
+extra_packages = ["golang", "python3-pip", "chromium"]
 ```
 
 ---
@@ -198,12 +250,12 @@ extra_packages = ["golang", "python3-pip"]
 
 **Secrets in Terraform state**: All three config variables are marked `sensitive = true`, which prevents them from appearing in plan/apply output. However, Terraform state files contain all variable values. Ensure your state backend is encrypted (S3 with SSE, Terraform Cloud, etc.).
 
-**Recommended approach**: Store your config files outside the repo and reference them with `file()`:
+**Recommended approach**: Store your config files in `mac-mini-setup` and reference them with `file()`:
 ```hcl
-openclaw_config_json = file("../openclaw-secrets.json")
+openclaw_config_json = file("../../mac-mini-setup/openclaw-secrets.json")
 ```
 
-Add `openclaw-secrets.*` and `openclaw-auth-profiles.json` to your global `.gitignore` to prevent accidental commits.
+The secrets files (`openclaw-secrets.*`, `openclaw-auth-profiles.json`) are gitignored in mac-mini-setup and never committed to either repo.
 
 **Alternative**: Use AWS Secrets Manager to store config values and inject them via IAM at runtime. This avoids secrets ever touching Terraform state.
 

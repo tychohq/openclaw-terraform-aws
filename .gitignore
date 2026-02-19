@@ -28,3 +28,9 @@ Thumbs.db
 secrets/
 openclaw-secrets.*
 openclaw-auth-profiles.json
+
+# Content dirs — all content lives in mac-mini-setup, not here
+openclaw-workspace/
+openclaw-skills/
+cron-jobs/
+config/
