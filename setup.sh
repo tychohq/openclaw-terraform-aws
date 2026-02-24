@@ -15,6 +15,15 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOTAL_STEPS=8
 
+# Source .env if it exists (pre-fills wizard prompts)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+    echo -e "${CYAN}Loaded .env file (values will be used as defaults)${NC}"
+    echo ""
+fi
+
 #═══════════════════════════════════════════════════════════════════════
 # --destroy flag
 #═══════════════════════════════════════════════════════════════════════
@@ -585,19 +594,30 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}STEP 3/$TOTAL_STEPS: Select AWS Region${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "Choose where to deploy OpenClaw:"
-echo ""
-echo "  1) eu-central-1  (Frankfurt, Europe)"
-echo "  2) us-east-1     (N. Virginia, US East)"
-echo "  3) us-west-2     (Oregon, US West)"
-echo ""
-read -p "Select region [1-3, default 1]: " REGION_CHOICE
+if [ -n "${AWS_REGION:-}" ]; then
+    echo -e "Region from .env: ${GREEN}$AWS_REGION${NC}"
+    echo ""
+    read -p "Use $AWS_REGION? [Y/n]: " REGION_CONFIRM
+    if [[ $REGION_CONFIRM =~ ^[Nn]$ ]]; then
+        unset AWS_REGION
+    fi
+fi
 
-case $REGION_CHOICE in
-    2) AWS_REGION="us-east-1" ;;
-    3) AWS_REGION="us-west-2" ;;
-    *) AWS_REGION="eu-central-1" ;;
-esac
+if [ -z "${AWS_REGION:-}" ]; then
+    echo "Choose where to deploy OpenClaw:"
+    echo ""
+    echo "  1) us-east-1     (N. Virginia, US East)"
+    echo "  2) us-west-2     (Oregon, US West)"
+    echo "  3) eu-central-1  (Frankfurt, Europe)"
+    echo ""
+    read -p "Select region [1-3, default 1]: " REGION_CHOICE
+
+    case $REGION_CHOICE in
+        2) AWS_REGION="us-west-2" ;;
+        3) AWS_REGION="eu-central-1" ;;
+        *) AWS_REGION="us-east-1" ;;
+    esac
+fi
 
 echo ""
 echo -e "Selected region: ${GREEN}$AWS_REGION${NC}"
@@ -615,8 +635,9 @@ echo "and to distinguish multiple deployments."
 echo ""
 echo "Examples: my-openclaw, work-agent, home-assistant"
 echo ""
-read -p "Name [openclaw]: " DEPLOYMENT_NAME
-DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-openclaw}"
+ENV_DEFAULT="${DEPLOYMENT_NAME:-openclaw}"
+read -p "Name [$ENV_DEFAULT]: " DEPLOYMENT_NAME_INPUT
+DEPLOYMENT_NAME="${DEPLOYMENT_NAME_INPUT:-$ENV_DEFAULT}"
 
 # Validate deployment name
 if ! echo "$DEPLOYMENT_NAME" | grep -qE '^[a-z][a-z0-9-]{0,23}$'; then
@@ -666,12 +687,22 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     read -p "Choose [1-3, default 1]: " LLM_CHOICE
     LLM_CHOICE="${LLM_CHOICE:-1}"
 
+    # Save .env defaults before clearing
+    _ENV_ANTHROPIC="${ANTHROPIC_API_KEY:-}"
+    _ENV_OPENAI="${OPENAI_API_KEY:-}"
+
     ANTHROPIC_API_KEY=""
     OPENAI_API_KEY=""
 
     if [ "$LLM_CHOICE" = "1" ] || [ "$LLM_CHOICE" = "3" ]; then
         echo ""
-        read -p "Anthropic API key: " ANTHROPIC_API_KEY
+        if [ -n "$_ENV_ANTHROPIC" ]; then
+            _MASKED="${_ENV_ANTHROPIC:0:10}...${_ENV_ANTHROPIC: -4}"
+            read -p "Anthropic API key [$_MASKED]: " _INPUT
+            ANTHROPIC_API_KEY="${_INPUT:-$_ENV_ANTHROPIC}"
+        else
+            read -p "Anthropic API key: " ANTHROPIC_API_KEY
+        fi
         if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo -e "${RED}Error: Anthropic API key is required${NC}"
             exit 1
@@ -680,7 +711,13 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
 
     if [ "$LLM_CHOICE" = "2" ] || [ "$LLM_CHOICE" = "3" ]; then
         echo ""
-        read -p "OpenAI API key: " OPENAI_API_KEY
+        if [ -n "$_ENV_OPENAI" ]; then
+            _MASKED="${_ENV_OPENAI:0:7}...${_ENV_OPENAI: -4}"
+            read -p "OpenAI API key [$_MASKED]: " _INPUT
+            OPENAI_API_KEY="${_INPUT:-$_ENV_OPENAI}"
+        else
+            read -p "OpenAI API key: " OPENAI_API_KEY
+        fi
         if [ -z "$OPENAI_API_KEY" ]; then
             echo -e "${RED}Error: OpenAI API key is required${NC}"
             exit 1
@@ -699,6 +736,15 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     read -p "Choose [1-3, default 1]: " CHANNEL_CHOICE
     CHANNEL_CHOICE="${CHANNEL_CHOICE:-1}"
 
+    # Save .env defaults before clearing
+    _ENV_DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
+    _ENV_DISCORD_GUILD="${DISCORD_GUILD_ID:-}"
+    _ENV_DISCORD_OWNER="${DISCORD_OWNER_ID:-}"
+    _ENV_TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+    _ENV_TELEGRAM_OWNER="${TELEGRAM_OWNER_ID:-}"
+    _ENV_OWNER_NAME="${OWNER_NAME:-}"
+    _ENV_TIMEZONE="${TIMEZONE:-America/New_York}"
+
     DISCORD_TOKEN=""
     DISCORD_GUILD_ID=""
     DISCORD_OWNER_ID=""
@@ -707,17 +753,35 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
 
     if [ "$CHANNEL_CHOICE" = "1" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
         echo ""
-        read -p "Discord bot token: " DISCORD_TOKEN
+        if [ -n "$_ENV_DISCORD_TOKEN" ]; then
+            _MASKED="${_ENV_DISCORD_TOKEN:0:10}...${_ENV_DISCORD_TOKEN: -4}"
+            read -p "Discord bot token [$_MASKED]: " _INPUT
+            DISCORD_TOKEN="${_INPUT:-$_ENV_DISCORD_TOKEN}"
+        else
+            read -p "Discord bot token: " DISCORD_TOKEN
+        fi
         if [ -z "$DISCORD_TOKEN" ]; then
             echo -e "${RED}Error: Discord bot token is required${NC}"
             exit 1
         fi
-        read -p "Discord guild (server) ID (right-click server → Copy Server ID): " DISCORD_GUILD_ID
+
+        if [ -n "$_ENV_DISCORD_GUILD" ]; then
+            read -p "Discord guild (server) ID [$_ENV_DISCORD_GUILD]: " _INPUT
+            DISCORD_GUILD_ID="${_INPUT:-$_ENV_DISCORD_GUILD}"
+        else
+            read -p "Discord guild (server) ID (right-click server → Copy Server ID): " DISCORD_GUILD_ID
+        fi
         if [ -z "$DISCORD_GUILD_ID" ]; then
             echo -e "${RED}Error: Discord guild ID is required${NC}"
             exit 1
         fi
-        read -p "Your Discord user ID (right-click yourself → Copy User ID): " DISCORD_OWNER_ID
+
+        if [ -n "$_ENV_DISCORD_OWNER" ]; then
+            read -p "Your Discord user ID [$_ENV_DISCORD_OWNER]: " _INPUT
+            DISCORD_OWNER_ID="${_INPUT:-$_ENV_DISCORD_OWNER}"
+        else
+            read -p "Your Discord user ID (right-click yourself → Copy User ID): " DISCORD_OWNER_ID
+        fi
         if [ -z "$DISCORD_OWNER_ID" ]; then
             echo -e "${RED}Error: Discord user ID is required${NC}"
             exit 1
@@ -726,12 +790,24 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
 
     if [ "$CHANNEL_CHOICE" = "2" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
         echo ""
-        read -p "Telegram bot token (from @BotFather): " TELEGRAM_TOKEN
+        if [ -n "$_ENV_TELEGRAM_TOKEN" ]; then
+            _MASKED="${_ENV_TELEGRAM_TOKEN:0:10}...${_ENV_TELEGRAM_TOKEN: -4}"
+            read -p "Telegram bot token [$_MASKED]: " _INPUT
+            TELEGRAM_TOKEN="${_INPUT:-$_ENV_TELEGRAM_TOKEN}"
+        else
+            read -p "Telegram bot token (from @BotFather): " TELEGRAM_TOKEN
+        fi
         if [ -z "$TELEGRAM_TOKEN" ]; then
             echo -e "${RED}Error: Telegram bot token is required${NC}"
             exit 1
         fi
-        read -p "Telegram owner chat ID (your numeric user ID): " TELEGRAM_OWNER_ID
+
+        if [ -n "$_ENV_TELEGRAM_OWNER" ]; then
+            read -p "Telegram owner chat ID [$_ENV_TELEGRAM_OWNER]: " _INPUT
+            TELEGRAM_OWNER_ID="${_INPUT:-$_ENV_TELEGRAM_OWNER}"
+        else
+            read -p "Telegram owner chat ID (your numeric user ID): " TELEGRAM_OWNER_ID
+        fi
         if [ -z "$TELEGRAM_OWNER_ID" ]; then
             echo -e "${RED}Error: Telegram owner chat ID is required${NC}"
             exit 1
@@ -741,9 +817,14 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     echo ""
     echo -e "${BLUE}── Owner Info ────────────────────────────────${NC}"
     echo ""
-    read -p "Your name (for the agent to know who you are): " OWNER_NAME
-    read -p "Timezone [America/New_York]: " TIMEZONE
-    TIMEZONE="${TIMEZONE:-America/New_York}"
+    if [ -n "$_ENV_OWNER_NAME" ]; then
+        read -p "Your name [$_ENV_OWNER_NAME]: " _INPUT
+        OWNER_NAME="${_INPUT:-$_ENV_OWNER_NAME}"
+    else
+        read -p "Your name (for the agent to know who you are): " OWNER_NAME
+    fi
+    read -p "Timezone [$_ENV_TIMEZONE]: " _INPUT
+    TIMEZONE="${_INPUT:-$_ENV_TIMEZONE}"
 
     # Generate config JSON with jq
     GATEWAY_TOKEN=$(openssl rand -hex 24)
