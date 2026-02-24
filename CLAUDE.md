@@ -1,7 +1,7 @@
-Read PRD-first-time-wizard.md for the current task.
-
 ## Project Structure
-- `setup.sh` — Interactive CLI wizard (bash)
+- `setup.sh` — Interactive CLI wizard (bash), sources `.env` for defaults
+- `.env` — Local secrets (gitignored), see `.env.example`
+- `.env.example` — Template with all configurable values
 - `terraform/` — All Terraform files
   - `main.tf` — Provider config
   - `variables.tf` — Input variables
@@ -12,6 +12,15 @@ Read PRD-first-time-wizard.md for the current task.
   - `cloud-init.sh.tftpl` — Cloud-init script (Terraform template)
   - `outputs.tf` — Output values
   - `terraform.tfvars.example` — Example tfvars (simple)
+  - `terraform.tfvars.advanced.example` — Full mac-mini-setup reference
+- `docs/` — Setup guides
+  - `discord-bot-setup.md` — Discord bot creation, intents, permissions, channel restriction
+
+## Quick Reference
+```bash
+./setup.sh            # Deploy (sources .env for defaults)
+./setup.sh --destroy  # Tear down everything
+```
 
 ## Rules
 - Shell scripts: `set -e`, bash, no external deps beyond aws cli / terraform / jq
@@ -20,3 +29,10 @@ Read PRD-first-time-wizard.md for the current task.
 - Keep backward compat — no config vars set = same behavior as before
 - Never write secrets to files inside the repo directory
 - Test: `cd terraform && terraform init && terraform validate` must pass
+
+## Discord Bot Config
+- Bot must NOT be public
+- All 3 privileged gateway intents enabled (Presence, Server Members, Message Content)
+- `groupPolicy: "allowlist"` — bot only responds in configured guilds
+- Optional `DISCORD_CHANNEL_ID` in `.env` restricts to a single channel
+- See `docs/discord-bot-setup.md` for agent-browser automation of bot creation

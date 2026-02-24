@@ -739,6 +739,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     # Save .env defaults before clearing
     _ENV_DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
     _ENV_DISCORD_GUILD="${DISCORD_GUILD_ID:-}"
+    _ENV_DISCORD_CHANNEL="${DISCORD_CHANNEL_ID:-}"
     _ENV_DISCORD_OWNER="${DISCORD_OWNER_ID:-}"
     _ENV_TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
     _ENV_TELEGRAM_OWNER="${TELEGRAM_OWNER_ID:-}"
@@ -747,6 +748,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
 
     DISCORD_TOKEN=""
     DISCORD_GUILD_ID=""
+    DISCORD_CHANNEL_ID=""
     DISCORD_OWNER_ID=""
     TELEGRAM_TOKEN=""
     TELEGRAM_OWNER_ID=""
@@ -774,6 +776,13 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         if [ -z "$DISCORD_GUILD_ID" ]; then
             echo -e "${RED}Error: Discord guild ID is required${NC}"
             exit 1
+        fi
+
+        if [ -n "$_ENV_DISCORD_CHANNEL" ]; then
+            read -p "Restrict to channel ID [$_ENV_DISCORD_CHANNEL] (blank=all channels): " _INPUT
+            DISCORD_CHANNEL_ID="${_INPUT:-$_ENV_DISCORD_CHANNEL}"
+        else
+            read -p "Restrict to channel ID (blank=all channels, right-click channel → Copy Channel ID): " DISCORD_CHANNEL_ID
         fi
 
         if [ -n "$_ENV_DISCORD_OWNER" ]; then
@@ -856,6 +865,14 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
             }
           }
         }')
+
+      # If a specific channel ID was provided, restrict to that channel
+      if [ -n "$DISCORD_CHANNEL_ID" ]; then
+        CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+          --arg guild_id "$DISCORD_GUILD_ID" \
+          --arg channel_id "$DISCORD_CHANNEL_ID" \
+          '.channels.discord.guilds[$guild_id].channels[$channel_id] = { allow: true }')
+      fi
     fi
 
     # Add Telegram channel if configured
