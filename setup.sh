@@ -974,6 +974,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
       --arg gw_token "$GATEWAY_TOKEN" \
       '{
         gateway: {
+          mode: "local",
           auth: { token: $gw_token },
           port: 18789
         }
