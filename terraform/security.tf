@@ -2,7 +2,7 @@
 
 # Security Group - Outbound Only
 resource "aws_security_group" "ec2" {
-  name        = "${var.project_name}-ec2-sg"
+  name        = "${var.deployment_name}-ec2-sg"
   description = "OpenClaw EC2 - outbound only"
   vpc_id      = aws_vpc.main.id
 
@@ -18,6 +18,6 @@ resource "aws_security_group" "ec2" {
   }
 
   tags = {
-    Name = "${var.project_name}-ec2-sg"
+    Name = "${var.deployment_name}-ec2-sg"
   }
 }

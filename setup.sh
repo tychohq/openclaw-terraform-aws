@@ -12,6 +12,72 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TOTAL_STEPS=8
+
+#═══════════════════════════════════════════════════════════════════════
+# --destroy flag
+#═══════════════════════════════════════════════════════════════════════
+if [ "${1:-}" = "--destroy" ]; then
+    echo ""
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${RED}  DESTROY OpenClaw Infrastructure${NC}"
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    if [ ! -f "$SCRIPT_DIR/terraform/terraform.tfstate" ]; then
+        echo "No Terraform state found in terraform/. Nothing to destroy."
+        exit 0
+    fi
+
+    cd "$SCRIPT_DIR/terraform"
+
+    echo "Checking what will be destroyed..."
+    echo ""
+
+    set +e
+    PLAN_OUTPUT=$(terraform plan -destroy -input=false 2>&1)
+    set -e
+
+    DESTROY_COUNT=$(echo "$PLAN_OUTPUT" | grep -oE '[0-9]+ to destroy' | grep -oE '[0-9]+' || echo "0")
+    DESTROY_COUNT=${DESTROY_COUNT:-0}
+
+    if [ "$DESTROY_COUNT" = "0" ]; then
+        echo "No resources to destroy."
+        exit 0
+    fi
+
+    echo -e "${RED}$DESTROY_COUNT resource(s) will be PERMANENTLY DESTROYED.${NC}"
+    echo ""
+    echo "$PLAN_OUTPUT" | grep -E '^\s+#.*will be destroyed' | while read -r line; do
+        echo -e "  ${RED}$line${NC}"
+    done
+    echo ""
+    echo -e "${RED}THIS ACTION CANNOT BE UNDONE!${NC}"
+    echo ""
+    read -p "Type 'DESTROY' to confirm: " DESTROY_CONFIRM
+
+    if [ "$DESTROY_CONFIRM" != "DESTROY" ]; then
+        echo ""
+        echo "Aborted. No changes were made."
+        exit 0
+    fi
+
+    echo ""
+    echo "Destroying infrastructure..."
+    terraform destroy -auto-approve
+
+    echo ""
+    echo -e "${GREEN}Infrastructure destroyed.${NC}"
+    echo ""
+    echo "To re-deploy:"
+    echo "  ./setup.sh"
+    exit 0
+fi
+
+#═══════════════════════════════════════════════════════════════════════
+# Banner
+#═══════════════════════════════════════════════════════════════════════
 clear
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -29,7 +95,7 @@ echo ""
 # STEP 1: Check Prerequisites
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 1/6: Checking Prerequisites${NC}"
+echo -e "${YELLOW}STEP 1/$TOTAL_STEPS: Checking Prerequisites${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Checking if required tools are installed..."
@@ -61,6 +127,20 @@ else
     exit 1
 fi
 
+# Check jq
+echo -n "  jq:        "
+if command -v jq &> /dev/null; then
+    JQ_VERSION=$(jq --version 2>&1)
+    echo -e "${GREEN}✓ Installed ($JQ_VERSION)${NC}"
+else
+    echo -e "${RED}✗ Not found${NC}"
+    echo ""
+    echo -e "${RED}jq is required for config generation. Install it:${NC}"
+    echo "  brew install jq  (macOS)"
+    echo "  sudo apt install jq  (Ubuntu/Debian)"
+    exit 1
+fi
+
 echo ""
 echo -e "${GREEN}All prerequisites met!${NC}"
 echo ""
@@ -69,7 +149,7 @@ echo ""
 # STEP 2: Verify AWS Account Access
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 2/6: Verifying AWS Account Access${NC}"
+echo -e "${YELLOW}STEP 2/$TOTAL_STEPS: Verifying AWS Account Access${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Checking your AWS credentials..."
@@ -114,7 +194,7 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
     echo ""
     echo -e "${BLUE}AWS Profile Selection${NC}"
     echo ""
-    
+
     # List available profiles
     echo "Available profiles:"
     PROFILES=""
@@ -125,7 +205,7 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
         CONFIG_PROFILES=$(grep '^\[profile ' ~/.aws/config | sed 's/\[profile //' | tr -d ']')
         PROFILES="$PROFILES $CONFIG_PROFILES"
     fi
-    
+
     # Remove duplicates and print
     echo "$PROFILES" | tr ' ' '\n' | sort -u | while read -r profile; do
         if [ -n "$profile" ]; then
@@ -133,54 +213,54 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
         fi
     done
     echo ""
-    
+
     read -p "Enter profile name: " AWS_PROFILE_NAME
-    
+
     if [ -z "$AWS_PROFILE_NAME" ]; then
         echo -e "${RED}Error: Profile name is required${NC}"
         exit 1
     fi
-    
+
     export AWS_PROFILE="$AWS_PROFILE_NAME"
-    
+
     echo ""
     echo "Verifying profile '$AWS_PROFILE_NAME'..."
     echo ""
-    
+
     # Try to get identity with the profile
     set +e
     NEW_IDENTITY=$(aws sts get-caller-identity 2>&1)
     IDENTITY_RESULT=$?
     set -e
-    
+
     # If failed, check if MFA might be needed
     if [ $IDENTITY_RESULT -ne 0 ]; then
         echo -e "${YELLOW}Profile verification failed.${NC}"
         echo "Error: $NEW_IDENTITY"
         echo ""
-        
+
         # Check if it's an MFA-related error
         if echo "$NEW_IDENTITY" | grep -qiE "mfa|token|session|accessdenied"; then
             echo "This might require MFA. Do you want to authenticate with MFA? [y/N]: "
             read -p "" USE_MFA
-            
+
             if [[ $USE_MFA =~ ^[Yy]$ ]]; then
                 echo ""
                 # Need to get MFA device - use default profile temporarily
                 unset AWS_PROFILE
-                
+
                 echo "Detecting MFA devices for your user..."
                 set +e
                 MFA_DEVICES=$(aws iam list-mfa-devices --query 'MFADevices[*].SerialNumber' --output text 2>/dev/null)
                 set -e
-                
+
                 if [ -n "$MFA_DEVICES" ] && [ "$MFA_DEVICES" != "None" ]; then
                     echo "Found MFA device(s):"
                     echo "$MFA_DEVICES" | tr '\t' '\n' | while read -r device; do
                         [ -n "$device" ] && echo "  • $device"
                     done
                     echo ""
-                    
+
                     # Use first device if only one
                     FIRST_DEVICE=$(echo "$MFA_DEVICES" | awk '{print $1}')
                     read -p "MFA device ARN [$FIRST_DEVICE]: " MFA_SERIAL
@@ -190,22 +270,22 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
                     echo "Format: arn:aws:iam::ACCOUNT_ID:mfa/USERNAME"
                     read -p "MFA device ARN: " MFA_SERIAL
                 fi
-                
+
                 if [ -z "$MFA_SERIAL" ]; then
                     echo -e "${RED}Error: MFA device ARN is required${NC}"
                     exit 1
                 fi
-                
+
                 read -p "Enter MFA code (6 digits): " MFA_CODE
-                
+
                 if [ -z "$MFA_CODE" ]; then
                     echo -e "${RED}Error: MFA code is required${NC}"
                     exit 1
                 fi
-                
+
                 echo ""
                 echo "Getting session credentials with MFA..."
-                
+
                 set +e
                 SESSION_CREDS=$(aws sts get-session-token \
                     --serial-number "$MFA_SERIAL" \
@@ -213,24 +293,24 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
                     --duration-seconds 3600 2>&1)
                 SESSION_RESULT=$?
                 set -e
-                
+
                 if [ $SESSION_RESULT -ne 0 ]; then
                     echo -e "${RED}✗ Failed to get session token${NC}"
                     echo "Error: $SESSION_CREDS"
                     exit 1
                 fi
-                
+
                 # Export the session credentials
                 export AWS_ACCESS_KEY_ID=$(echo "$SESSION_CREDS" | grep -o '"AccessKeyId": "[^"]*"' | cut -d'"' -f4)
                 export AWS_SECRET_ACCESS_KEY=$(echo "$SESSION_CREDS" | grep -o '"SecretAccessKey": "[^"]*"' | cut -d'"' -f4)
                 export AWS_SESSION_TOKEN=$(echo "$SESSION_CREDS" | grep -o '"SessionToken": "[^"]*"' | cut -d'"' -f4)
                 unset AWS_PROFILE
-                
+
                 EXPIRATION=$(echo "$SESSION_CREDS" | grep -o '"Expiration": "[^"]*"' | cut -d'"' -f4)
                 echo -e "${GREEN}✓ MFA authentication successful${NC}"
                 echo -e "${YELLOW}Session expires: $EXPIRATION${NC}"
                 echo ""
-                
+
                 # Re-verify
                 NEW_IDENTITY=$(aws sts get-caller-identity)
             else
@@ -242,12 +322,12 @@ if [ "$ACCOUNT_CHOICE" = "2" ]; then
             exit 1
         fi
     fi
-    
+
     # Parse the identity
     AWS_ACCOUNT_ID=$(echo "$NEW_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
     AWS_USER_ARN=$(echo "$NEW_IDENTITY" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
     AWS_USER=$(echo "$AWS_USER_ARN" | rev | cut -d'/' -f1 | rev)
-    
+
     echo -e "${GREEN}✓ Profile verified${NC}"
     echo -e "  Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
     echo -e "  User:     ${GREEN}$AWS_USER${NC}"
@@ -260,13 +340,13 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
     echo ""
     echo -e "${BLUE}Assume Role Configuration${NC}"
     echo ""
-    
+
     # Ask if user wants to use a different profile as source
     echo "Do you want to use a specific AWS profile as source credentials?"
     echo "(Required if your default credentials can't assume the target role)"
     echo ""
     read -p "Use a specific profile? [y/N]: " USE_SOURCE_PROFILE
-    
+
     if [[ $USE_SOURCE_PROFILE =~ ^[Yy]$ ]]; then
         echo ""
         echo "Available profiles:"
@@ -282,39 +362,39 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
             [ -n "$profile" ] && echo "  • $profile"
         done
         echo ""
-        
+
         read -p "Source profile name: " SOURCE_PROFILE
-        
+
         if [ -n "$SOURCE_PROFILE" ]; then
             export AWS_PROFILE="$SOURCE_PROFILE"
             echo ""
             echo "Verifying source profile '$SOURCE_PROFILE'..."
-            
+
             set +e
             SOURCE_IDENTITY=$(aws sts get-caller-identity 2>&1)
             SOURCE_RESULT=$?
             set -e
-            
+
             if [ $SOURCE_RESULT -ne 0 ]; then
                 echo -e "${YELLOW}Profile verification failed.${NC}"
                 echo "Error: $SOURCE_IDENTITY"
                 echo ""
-                
+
                 # Check if MFA might be needed
                 if echo "$SOURCE_IDENTITY" | grep -qiE "mfa|token|session|invalid|expired|accessdenied"; then
                     echo "This profile may require MFA authentication."
                     read -p "Do you want to authenticate with MFA? [y/N]: " USE_MFA
-                    
+
                     if [[ $USE_MFA =~ ^[Yy]$ ]]; then
                         echo ""
                         # Get MFA device using default credentials
                         unset AWS_PROFILE
-                        
+
                         echo "Detecting MFA devices..."
                         set +e
                         MFA_DEVICES=$(aws iam list-mfa-devices --query 'MFADevices[*].SerialNumber' --output text 2>/dev/null)
                         set -e
-                        
+
                         if [ -n "$MFA_DEVICES" ] && [ "$MFA_DEVICES" != "None" ]; then
                             echo "Found MFA device(s):"
                             echo "$MFA_DEVICES" | tr '\t' '\n' | while read -r device; do
@@ -328,22 +408,22 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
                             echo "Enter your MFA device ARN:"
                             read -p "MFA ARN: " MFA_SERIAL
                         fi
-                        
+
                         if [ -z "$MFA_SERIAL" ]; then
                             echo -e "${RED}Error: MFA device ARN is required${NC}"
                             exit 1
                         fi
-                        
+
                         read -p "Enter MFA code (6 digits): " MFA_CODE
-                        
+
                         if [ -z "$MFA_CODE" ]; then
                             echo -e "${RED}Error: MFA code is required${NC}"
                             exit 1
                         fi
-                        
+
                         echo ""
                         echo "Getting session credentials with MFA..."
-                        
+
                         set +e
                         SESSION_CREDS=$(aws sts get-session-token \
                             --serial-number "$MFA_SERIAL" \
@@ -351,23 +431,23 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
                             --duration-seconds 3600 2>&1)
                         SESSION_RESULT=$?
                         set -e
-                        
+
                         if [ $SESSION_RESULT -ne 0 ]; then
                             echo -e "${RED}✗ Failed to get session token${NC}"
                             echo "Error: $SESSION_CREDS"
                             exit 1
                         fi
-                        
+
                         # Export session credentials (these will be used for assume-role)
                         export AWS_ACCESS_KEY_ID=$(echo "$SESSION_CREDS" | grep -o '"AccessKeyId": "[^"]*"' | cut -d'"' -f4)
                         export AWS_SECRET_ACCESS_KEY=$(echo "$SESSION_CREDS" | grep -o '"SecretAccessKey": "[^"]*"' | cut -d'"' -f4)
                         export AWS_SESSION_TOKEN=$(echo "$SESSION_CREDS" | grep -o '"SessionToken": "[^"]*"' | cut -d'"' -f4)
-                        
+
                         EXPIRATION=$(echo "$SESSION_CREDS" | grep -o '"Expiration": "[^"]*"' | cut -d'"' -f4)
                         echo -e "${GREEN}✓ MFA authentication successful${NC}"
                         echo -e "${YELLOW}Session expires: $EXPIRATION${NC}"
                         echo ""
-                        
+
                         # Verify with new credentials
                         SOURCE_IDENTITY=$(aws sts get-caller-identity)
                         SOURCE_ACCOUNT=$(echo "$SOURCE_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
@@ -389,40 +469,40 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
             fi
         fi
     fi
-    
+
     echo "Enter the Role ARN to assume."
     echo "Format: arn:aws:iam::TARGET_ACCOUNT_ID:role/ROLE_NAME"
     echo ""
     read -p "Role ARN: " ROLE_ARN
-    
+
     if [ -z "$ROLE_ARN" ]; then
         echo -e "${RED}Error: Role ARN is required${NC}"
         exit 1
     fi
-    
+
     echo ""
     read -p "External ID (leave empty if not required): " EXTERNAL_ID
-    
+
     echo ""
     read -p "Does this role require MFA? [y/N]: " MFA_REQUIRED
-    
+
     MFA_ARGS=""
-    
+
     if [[ $MFA_REQUIRED =~ ^[Yy]$ ]]; then
         echo ""
         echo "Detecting MFA devices..."
-        
+
         set +e
         MFA_DEVICES=$(aws iam list-mfa-devices --query 'MFADevices[*].SerialNumber' --output text 2>/dev/null)
         set -e
-        
+
         if [ -n "$MFA_DEVICES" ] && [ "$MFA_DEVICES" != "None" ]; then
             echo "Found MFA device(s):"
             echo "$MFA_DEVICES" | tr '\t' '\n' | while read -r device; do
                 [ -n "$device" ] && echo "  • $device"
             done
             echo ""
-            
+
             FIRST_DEVICE=$(echo "$MFA_DEVICES" | awk '{print $1}')
             read -p "MFA device ARN [$FIRST_DEVICE]: " MFA_SERIAL
             MFA_SERIAL="${MFA_SERIAL:-$FIRST_DEVICE}"
@@ -431,37 +511,37 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
             echo "Format: arn:aws:iam::ACCOUNT_ID:mfa/USERNAME"
             read -p "MFA device ARN: " MFA_SERIAL
         fi
-        
+
         if [ -z "$MFA_SERIAL" ]; then
             echo -e "${RED}Error: MFA device ARN is required${NC}"
             exit 1
         fi
-        
+
         read -p "Enter MFA code (6 digits): " MFA_CODE
-        
+
         if [ -z "$MFA_CODE" ]; then
             echo -e "${RED}Error: MFA code is required${NC}"
             exit 1
         fi
-        
+
         MFA_ARGS="--serial-number $MFA_SERIAL --token-code $MFA_CODE"
     fi
-    
+
     SESSION_NAME="openclaw-setup-$(date +%s)"
-    
+
     echo ""
     echo "Assuming role..."
-    
+
     # Build command
     ASSUME_CMD="aws sts assume-role --role-arn $ROLE_ARN --role-session-name $SESSION_NAME"
     [ -n "$EXTERNAL_ID" ] && ASSUME_CMD="$ASSUME_CMD --external-id $EXTERNAL_ID"
     [ -n "$MFA_ARGS" ] && ASSUME_CMD="$ASSUME_CMD $MFA_ARGS"
-    
+
     set +e
     ASSUMED_ROLE=$(eval $ASSUME_CMD 2>&1)
     ASSUME_RESULT=$?
     set -e
-    
+
     if [ $ASSUME_RESULT -ne 0 ]; then
         echo -e "${RED}✗ Failed to assume role${NC}"
         echo ""
@@ -474,20 +554,20 @@ elif [ "$ACCOUNT_CHOICE" = "3" ]; then
         echo "  • MFA is required but not provided or incorrect"
         exit 1
     fi
-    
+
     # Extract and export credentials
     export AWS_ACCESS_KEY_ID=$(echo "$ASSUMED_ROLE" | grep -o '"AccessKeyId": "[^"]*"' | cut -d'"' -f4)
     export AWS_SECRET_ACCESS_KEY=$(echo "$ASSUMED_ROLE" | grep -o '"SecretAccessKey": "[^"]*"' | cut -d'"' -f4)
     export AWS_SESSION_TOKEN=$(echo "$ASSUMED_ROLE" | grep -o '"SessionToken": "[^"]*"' | cut -d'"' -f4)
-    
+
     # Get new identity
     NEW_IDENTITY=$(aws sts get-caller-identity)
     AWS_ACCOUNT_ID=$(echo "$NEW_IDENTITY" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
     AWS_USER_ARN=$(echo "$NEW_IDENTITY" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
     AWS_USER=$(echo "$AWS_USER_ARN" | rev | cut -d'/' -f1 | rev)
-    
+
     EXPIRATION=$(echo "$ASSUMED_ROLE" | grep -o '"Expiration": "[^"]*"' | cut -d'"' -f4)
-    
+
     echo -e "${GREEN}✓ Role assumed successfully${NC}"
     echo -e "  Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
     echo -e "  Role:     ${GREEN}$AWS_USER${NC}"
@@ -502,7 +582,7 @@ echo ""
 # STEP 3: Select AWS Region
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 3/6: Select AWS Region${NC}"
+echo -e "${YELLOW}STEP 3/$TOTAL_STEPS: Select AWS Region${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Choose where to deploy OpenClaw:"
@@ -524,10 +604,286 @@ echo -e "Selected region: ${GREEN}$AWS_REGION${NC}"
 echo ""
 
 #═══════════════════════════════════════════════════════════════════════
-# STEP 4: Check for Existing Resources
+# STEP 4: Name Your Deployment
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 4/6: Scanning Account for Existing Resources${NC}"
+echo -e "${YELLOW}STEP 4/$TOTAL_STEPS: Name Your Deployment${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo "Give this deployment a name. Used for AWS resource tags"
+echo "and to distinguish multiple deployments."
+echo ""
+echo "Examples: my-openclaw, work-agent, home-assistant"
+echo ""
+read -p "Name [openclaw]: " DEPLOYMENT_NAME
+DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-openclaw}"
+
+# Validate deployment name
+if ! echo "$DEPLOYMENT_NAME" | grep -qE '^[a-z][a-z0-9-]{0,23}$'; then
+    echo -e "${RED}Error: Name must start with a letter, be lowercase alphanumeric/hyphens, max 24 chars.${NC}"
+    exit 1
+fi
+
+echo ""
+echo -e "Deployment name: ${GREEN}$DEPLOYMENT_NAME${NC}"
+echo ""
+
+#═══════════════════════════════════════════════════════════════════════
+# STEP 5: Configure OpenClaw
+#═══════════════════════════════════════════════════════════════════════
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}STEP 5/$TOTAL_STEPS: Configure OpenClaw${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo "How do you want to configure OpenClaw?"
+echo ""
+echo "  1) Quick setup — enter API key + channel token (recommended for first time)"
+echo "  2) Config files — point to existing openclaw config files"
+echo "  3) Skip — configure manually after deploy via SSM"
+echo ""
+read -p "Choose [1-3, default 1]: " CONFIG_CHOICE
+CONFIG_CHOICE="${CONFIG_CHOICE:-1}"
+
+CONFIG_JSON=""
+ENV_CONTENT=""
+OWNER_NAME=""
+TIMEZONE="UTC"
+TF_VAR_ARGS=""
+
+#-----------------------------------------------------------------------
+# Option 1: Quick Setup
+#-----------------------------------------------------------------------
+if [ "$CONFIG_CHOICE" = "1" ]; then
+    echo ""
+    echo -e "${BLUE}── LLM Provider ──────────────────────────────${NC}"
+    echo ""
+    echo "Which LLM provider? (you need at least one)"
+    echo ""
+    echo "  1) Anthropic (Claude) — recommended"
+    echo "  2) OpenAI (GPT)"
+    echo "  3) Both"
+    echo ""
+    read -p "Choose [1-3, default 1]: " LLM_CHOICE
+    LLM_CHOICE="${LLM_CHOICE:-1}"
+
+    ANTHROPIC_API_KEY=""
+    OPENAI_API_KEY=""
+
+    if [ "$LLM_CHOICE" = "1" ] || [ "$LLM_CHOICE" = "3" ]; then
+        echo ""
+        read -p "Anthropic API key: " ANTHROPIC_API_KEY
+        if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo -e "${RED}Error: Anthropic API key is required${NC}"
+            exit 1
+        fi
+    fi
+
+    if [ "$LLM_CHOICE" = "2" ] || [ "$LLM_CHOICE" = "3" ]; then
+        echo ""
+        read -p "OpenAI API key: " OPENAI_API_KEY
+        if [ -z "$OPENAI_API_KEY" ]; then
+            echo -e "${RED}Error: OpenAI API key is required${NC}"
+            exit 1
+        fi
+    fi
+
+    echo ""
+    echo -e "${BLUE}── Chat Channel ──────────────────────────────${NC}"
+    echo ""
+    echo "How will you talk to your OpenClaw?"
+    echo ""
+    echo "  1) Discord bot"
+    echo "  2) Telegram bot"
+    echo "  3) Both"
+    echo ""
+    read -p "Choose [1-3, default 1]: " CHANNEL_CHOICE
+    CHANNEL_CHOICE="${CHANNEL_CHOICE:-1}"
+
+    DISCORD_TOKEN=""
+    DISCORD_GUILD_ID=""
+    DISCORD_OWNER_ID=""
+    TELEGRAM_TOKEN=""
+    TELEGRAM_OWNER_ID=""
+
+    if [ "$CHANNEL_CHOICE" = "1" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
+        echo ""
+        read -p "Discord bot token: " DISCORD_TOKEN
+        if [ -z "$DISCORD_TOKEN" ]; then
+            echo -e "${RED}Error: Discord bot token is required${NC}"
+            exit 1
+        fi
+        read -p "Discord guild (server) ID (right-click server → Copy Server ID): " DISCORD_GUILD_ID
+        if [ -z "$DISCORD_GUILD_ID" ]; then
+            echo -e "${RED}Error: Discord guild ID is required${NC}"
+            exit 1
+        fi
+        read -p "Your Discord user ID (right-click yourself → Copy User ID): " DISCORD_OWNER_ID
+        if [ -z "$DISCORD_OWNER_ID" ]; then
+            echo -e "${RED}Error: Discord user ID is required${NC}"
+            exit 1
+        fi
+    fi
+
+    if [ "$CHANNEL_CHOICE" = "2" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
+        echo ""
+        read -p "Telegram bot token (from @BotFather): " TELEGRAM_TOKEN
+        if [ -z "$TELEGRAM_TOKEN" ]; then
+            echo -e "${RED}Error: Telegram bot token is required${NC}"
+            exit 1
+        fi
+        read -p "Telegram owner chat ID (your numeric user ID): " TELEGRAM_OWNER_ID
+        if [ -z "$TELEGRAM_OWNER_ID" ]; then
+            echo -e "${RED}Error: Telegram owner chat ID is required${NC}"
+            exit 1
+        fi
+    fi
+
+    echo ""
+    echo -e "${BLUE}── Owner Info ────────────────────────────────${NC}"
+    echo ""
+    read -p "Your name (for the agent to know who you are): " OWNER_NAME
+    read -p "Timezone [America/New_York]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-America/New_York}"
+
+    # Generate config JSON with jq
+    GATEWAY_TOKEN=$(openssl rand -hex 24)
+
+    CONFIG_JSON=$(jq -n \
+      --arg gw_token "$GATEWAY_TOKEN" \
+      '{
+        gateway: {
+          auth: { token: $gw_token },
+          port: 18789
+        }
+      }')
+
+    # Add Discord channel if configured
+    if [ -n "$DISCORD_TOKEN" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        --arg token "$DISCORD_TOKEN" \
+        --arg guild_id "$DISCORD_GUILD_ID" \
+        --arg owner_id "$DISCORD_OWNER_ID" \
+        '.channels.discord = {
+          enabled: true,
+          token: $token,
+          groupPolicy: "allowlist",
+          dmPolicy: "pairing",
+          allowFrom: [$owner_id],
+          guilds: {
+            ($guild_id): {
+              requireMention: false
+            }
+          }
+        }')
+    fi
+
+    # Add Telegram channel if configured
+    if [ -n "$TELEGRAM_TOKEN" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        --arg token "$TELEGRAM_TOKEN" \
+        --arg owner_id "$TELEGRAM_OWNER_ID" \
+        '.channels.telegram = {
+          enabled: true,
+          botToken: $token,
+          dmPolicy: "pairing",
+          groupPolicy: "allowlist",
+          allowFrom: [$owner_id]
+        }')
+    fi
+
+    # Add model config
+    if [ -n "$ANTHROPIC_API_KEY" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        '.agents.main.model = "claude-sonnet-4-20250514" |
+         .agents.main.provider = "anthropic"')
+    elif [ -n "$OPENAI_API_KEY" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        '.agents.main.model = "gpt-4o" |
+         .agents.main.provider = "openai"')
+    fi
+
+    # Generate .env content
+    ENV_CONTENT=""
+    [ -n "$ANTHROPIC_API_KEY" ] && ENV_CONTENT+="ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"$'\n'
+    [ -n "$OPENAI_API_KEY" ] && ENV_CONTENT+="OPENAI_API_KEY=$OPENAI_API_KEY"$'\n'
+    ENV_CONTENT+="GATEWAY_AUTH_TOKEN=$GATEWAY_TOKEN"$'\n'
+
+    # Write secrets to temp files
+    echo "$CONFIG_JSON" > /tmp/openclaw-config.json
+    printf '%s' "$ENV_CONTENT" > /tmp/openclaw-env
+
+    echo ""
+    echo -e "${GREEN}✓ Configuration generated${NC}"
+    echo ""
+
+#-----------------------------------------------------------------------
+# Option 2: Config Files
+#-----------------------------------------------------------------------
+elif [ "$CONFIG_CHOICE" = "2" ]; then
+    echo ""
+    echo "Point to your config files. Leave blank to skip any."
+    echo ""
+
+    read -p "OpenClaw config JSON path [../../mac-mini-setup/openclaw-secrets.json]: " CONFIG_PATH
+    CONFIG_PATH="${CONFIG_PATH:-../../mac-mini-setup/openclaw-secrets.json}"
+
+    read -p "OpenClaw .env path [../../mac-mini-setup/openclaw-secrets.env]: " ENV_PATH
+    ENV_PATH="${ENV_PATH:-../../mac-mini-setup/openclaw-secrets.env}"
+
+    read -p "Auth profiles JSON path [../../mac-mini-setup/openclaw-auth-profiles.json]: " AUTH_PATH
+    AUTH_PATH="${AUTH_PATH:-../../mac-mini-setup/openclaw-auth-profiles.json}"
+
+    # Validate and read config files
+    if [ -n "$CONFIG_PATH" ] && [ -f "$CONFIG_PATH" ]; then
+        CONFIG_JSON=$(cat "$CONFIG_PATH")
+        echo -e "  Config JSON: ${GREEN}✓ loaded${NC}"
+    elif [ -n "$CONFIG_PATH" ]; then
+        echo -e "  Config JSON: ${YELLOW}file not found, skipping${NC}"
+    fi
+
+    if [ -n "$ENV_PATH" ] && [ -f "$ENV_PATH" ]; then
+        ENV_CONTENT=$(cat "$ENV_PATH")
+        echo -e "  .env file:   ${GREEN}✓ loaded${NC}"
+    elif [ -n "$ENV_PATH" ]; then
+        echo -e "  .env file:   ${YELLOW}file not found, skipping${NC}"
+    fi
+
+    AUTH_PROFILES_JSON=""
+    if [ -n "$AUTH_PATH" ] && [ -f "$AUTH_PATH" ]; then
+        AUTH_PROFILES_JSON=$(cat "$AUTH_PATH")
+        echo -e "  Auth profiles: ${GREEN}✓ loaded${NC}"
+    elif [ -n "$AUTH_PATH" ]; then
+        echo -e "  Auth profiles: ${YELLOW}file not found, skipping${NC}"
+    fi
+
+    # Write to temp files if loaded
+    if [ -n "$CONFIG_JSON" ]; then
+        echo "$CONFIG_JSON" > /tmp/openclaw-config.json
+    fi
+    if [ -n "$ENV_CONTENT" ]; then
+        printf '%s' "$ENV_CONTENT" > /tmp/openclaw-env
+    fi
+
+    echo ""
+    read -p "Owner name: " OWNER_NAME
+    read -p "Timezone [America/New_York]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-America/New_York}"
+    echo ""
+
+#-----------------------------------------------------------------------
+# Option 3: Skip
+#-----------------------------------------------------------------------
+else
+    echo ""
+    echo -e "${CYAN}Skipping OpenClaw config. You can configure manually after deploy via SSM.${NC}"
+    echo ""
+fi
+
+#═══════════════════════════════════════════════════════════════════════
+# STEP 6: Check for Existing Resources
+#═══════════════════════════════════════════════════════════════════════
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}STEP 6/$TOTAL_STEPS: Scanning Account for Existing Resources${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Scanning account $AWS_ACCOUNT_ID in $AWS_REGION..."
@@ -536,16 +892,15 @@ echo ""
 
 EXISTING_OPENCLAW=()
 EXISTING_ACCOUNT=()
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo -e "${BLUE}Checking for OpenClaw-specific resources:${NC}"
+echo -e "${BLUE}Checking for resources tagged with '$DEPLOYMENT_NAME':${NC}"
 echo ""
 
-# Check VPCs with openclaw tag
-echo -n "  VPCs with 'openclaw' tag... "
+# Check VPCs with deployment_name tag
+echo -n "  VPCs with '$DEPLOYMENT_NAME' tag... "
 set +e
 EXISTING_VPC=$(aws ec2 describe-vpcs \
-    --filters "Name=tag:Name,Values=*openclaw*" \
+    --filters "Name=tag:Name,Values=*${DEPLOYMENT_NAME}*" \
     --region "$AWS_REGION" \
     --query 'Vpcs[*].[VpcId,Tags[?Key==`Name`].Value|[0]]' \
     --output text 2>/dev/null)
@@ -559,11 +914,11 @@ else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check EC2 instances with openclaw tag
-echo -n "  EC2 instances with 'openclaw' tag... "
+# Check EC2 instances with deployment_name tag
+echo -n "  EC2 instances with '$DEPLOYMENT_NAME' tag... "
 set +e
 EXISTING_EC2=$(aws ec2 describe-instances \
-    --filters "Name=tag:Name,Values=*openclaw*" "Name=instance-state-name,Values=running,stopped,pending" \
+    --filters "Name=tag:Name,Values=*${DEPLOYMENT_NAME}*" "Name=instance-state-name,Values=running,stopped,pending" \
     --region "$AWS_REGION" \
     --query 'Reservations[*].Instances[*].[InstanceId,State.Name,Tags[?Key==`Name`].Value|[0]]' \
     --output text 2>/dev/null)
@@ -577,11 +932,11 @@ else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Security Groups with openclaw name
-echo -n "  Security Groups with 'openclaw' name... "
+# Check Security Groups with deployment_name name
+echo -n "  Security Groups with '$DEPLOYMENT_NAME' name... "
 set +e
 EXISTING_SG=$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=*openclaw*" \
+    --filters "Name=group-name,Values=*${DEPLOYMENT_NAME}*" \
     --region "$AWS_REGION" \
     --query 'SecurityGroups[*].[GroupId,GroupName]' \
     --output text 2>/dev/null)
@@ -596,34 +951,34 @@ else
 fi
 
 # Check IAM role
-echo -n "  IAM role 'openclaw-ec2-role'... "
+echo -n "  IAM role '${DEPLOYMENT_NAME}-ec2-role'... "
 set +e
-EXISTING_ROLE=$(aws iam get-role --role-name openclaw-ec2-role --query 'Role.Arn' --output text 2>/dev/null)
+EXISTING_ROLE=$(aws iam get-role --role-name "${DEPLOYMENT_NAME}-ec2-role" --query 'Role.Arn' --output text 2>/dev/null)
 set -e
 if [ -n "$EXISTING_ROLE" ] && [ "$EXISTING_ROLE" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
-    EXISTING_OPENCLAW+=("IAM Role: openclaw-ec2-role")
+    EXISTING_OPENCLAW+=("IAM Role: ${DEPLOYMENT_NAME}-ec2-role")
 else
     echo -e "${GREEN}None${NC}"
 fi
 
 # Check IAM instance profile
-echo -n "  IAM instance profile 'openclaw-ec2-profile'... "
+echo -n "  IAM instance profile '${DEPLOYMENT_NAME}-ec2-profile'... "
 set +e
-EXISTING_PROFILE=$(aws iam get-instance-profile --instance-profile-name openclaw-ec2-profile --query 'InstanceProfile.Arn' --output text 2>/dev/null)
+EXISTING_PROFILE=$(aws iam get-instance-profile --instance-profile-name "${DEPLOYMENT_NAME}-ec2-profile" --query 'InstanceProfile.Arn' --output text 2>/dev/null)
 set -e
 if [ -n "$EXISTING_PROFILE" ] && [ "$EXISTING_PROFILE" != "None" ]; then
     echo -e "${YELLOW}Found${NC}"
-    EXISTING_OPENCLAW+=("IAM Instance Profile: openclaw-ec2-profile")
+    EXISTING_OPENCLAW+=("IAM Instance Profile: ${DEPLOYMENT_NAME}-ec2-profile")
 else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Subnets with openclaw tag
-echo -n "  Subnets with 'openclaw' tag... "
+# Check Subnets with deployment_name tag
+echo -n "  Subnets with '$DEPLOYMENT_NAME' tag... "
 set +e
 EXISTING_SUBNET=$(aws ec2 describe-subnets \
-    --filters "Name=tag:Name,Values=*openclaw*" \
+    --filters "Name=tag:Name,Values=*${DEPLOYMENT_NAME}*" \
     --region "$AWS_REGION" \
     --query 'Subnets[*].[SubnetId,Tags[?Key==`Name`].Value|[0]]' \
     --output text 2>/dev/null)
@@ -637,11 +992,11 @@ else
     echo -e "${GREEN}None${NC}"
 fi
 
-# Check Internet Gateways with openclaw tag
-echo -n "  Internet Gateways with 'openclaw' tag... "
+# Check Internet Gateways with deployment_name tag
+echo -n "  Internet Gateways with '$DEPLOYMENT_NAME' tag... "
 set +e
 EXISTING_IGW=$(aws ec2 describe-internet-gateways \
-    --filters "Name=tag:Name,Values=*openclaw*" \
+    --filters "Name=tag:Name,Values=*${DEPLOYMENT_NAME}*" \
     --region "$AWS_REGION" \
     --query 'InternetGateways[*].[InternetGatewayId,Tags[?Key==`Name`].Value|[0]]' \
     --output text 2>/dev/null)
@@ -742,7 +1097,7 @@ echo ""
 # Report OpenClaw findings
 if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
     echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║  ⚠️  EXISTING OPENCLAW RESOURCES DETECTED                      ║${NC}"
+    echo -e "${YELLOW}║  EXISTING RESOURCES DETECTED                                  ║${NC}"
     echo -e "${YELLOW}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     for resource in "${EXISTING_OPENCLAW[@]}"; do
@@ -756,7 +1111,7 @@ fi
 # Report account summary
 if [ ${#EXISTING_ACCOUNT[@]} -gt 0 ]; then
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║  ℹ️  ACCOUNT HAS EXISTING INFRASTRUCTURE                       ║${NC}"
+    echo -e "${CYAN}║  ACCOUNT HAS EXISTING INFRASTRUCTURE                          ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "This account contains other resources:"
@@ -766,7 +1121,7 @@ if [ ${#EXISTING_ACCOUNT[@]} -gt 0 ]; then
     done
     echo ""
     echo -e "${GREEN}OpenClaw deployment will NOT affect these resources.${NC}"
-    echo "OpenClaw creates isolated resources with 'openclaw' prefix."
+    echo "OpenClaw creates isolated resources with '${DEPLOYMENT_NAME}' prefix."
     echo ""
 fi
 
@@ -775,33 +1130,35 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║                    DEPLOYMENT SUMMARY                         ║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Target Account:  $AWS_ACCOUNT_ID"
-echo "  Target Region:   $AWS_REGION"
+echo "  Target Account:   $AWS_ACCOUNT_ID"
+echo "  Target Region:    $AWS_REGION"
+echo "  Deployment Name:  $DEPLOYMENT_NAME"
+[ -n "$OWNER_NAME" ] && echo "  Owner:            $OWNER_NAME"
 echo ""
 echo "  Resources to be created:"
-echo "    • 1 VPC (10.0.0.0/16) with 'openclaw-vpc' tag"
-echo "    • 1 Public subnet with 'openclaw-public' tag"
+echo "    • 1 VPC (10.0.0.0/16) with '${DEPLOYMENT_NAME}-vpc' tag"
+echo "    • 1 Public subnet with '${DEPLOYMENT_NAME}-public' tag"
 echo "    • 1 Internet Gateway"
 echo "    • 1 Security Group (outbound only)"
-echo "    • 1 IAM Role (openclaw-ec2-role)"
-echo "    • 1 EC2 instance (t4g.small)"
+echo "    • 1 IAM Role (${DEPLOYMENT_NAME}-ec2-role)"
+echo "    • 1 EC2 instance (t4g.medium)"
 echo ""
 
 if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
-    echo -e "${YELLOW}⚠️  ${#EXISTING_OPENCLAW[@]} existing OpenClaw resource(s) may be affected.${NC}"
+    echo -e "${YELLOW}${#EXISTING_OPENCLAW[@]} existing resource(s) may be affected.${NC}"
     echo ""
     echo "Options:"
-    echo "  1) Continue - I understand existing OpenClaw resources may be modified"
+    echo "  1) Continue - I understand existing resources may be modified"
     echo "  2) Abort - Do not make any changes"
     echo ""
     read -p "Choose [1-2]: " EXISTING_CHOICE
-    
+
     if [ "$EXISTING_CHOICE" != "1" ]; then
         echo ""
         echo "Aborted. No changes were made."
         echo ""
         echo "To manage existing resources:"
-        echo "  • Destroy first: cd terraform && terraform destroy"
+        echo "  • Destroy first: ./setup.sh --destroy"
         echo "  • Or use a different region"
         exit 0
     fi
@@ -810,7 +1167,7 @@ else
     echo -e "${GREEN}✓ No conflicts detected. Safe to proceed.${NC}"
     echo ""
     read -p "Do you want to proceed with deployment? [y/N]: " PROCEED_CHOICE
-    
+
     if [[ ! $PROCEED_CHOICE =~ ^[Yy]$ ]]; then
         echo ""
         echo "Aborted. No changes were made."
@@ -820,10 +1177,10 @@ else
 fi
 
 #═══════════════════════════════════════════════════════════════════════
-# STEP 5: Deploy Infrastructure
+# STEP 7: Deploy Infrastructure
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 5/6: Deploying Infrastructure${NC}"
+echo -e "${YELLOW}STEP 7/$TOTAL_STEPS: Deploying Infrastructure${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Preparing deployment to AWS account $AWS_ACCOUNT_ID in $AWS_REGION..."
@@ -831,10 +1188,27 @@ echo ""
 
 cd "$SCRIPT_DIR/terraform"
 
-# Create tfvars
+# Create terraform.tfvars with non-secret values
 cat > terraform.tfvars << EOF
-aws_region = "$AWS_REGION"
+aws_region      = "$AWS_REGION"
+deployment_name = "$DEPLOYMENT_NAME"
 EOF
+
+[ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
+[ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars
+
+# Build -var args for secrets (never written to repo)
+TF_VAR_ARGS=""
+if [ -f /tmp/openclaw-config.json ]; then
+    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_config_json=$(cat /tmp/openclaw-config.json)"
+fi
+if [ -f /tmp/openclaw-env ]; then
+    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_env=$(cat /tmp/openclaw-env)"
+fi
+if [ -n "${AUTH_PROFILES_JSON:-}" ]; then
+    echo "$AUTH_PROFILES_JSON" > /tmp/openclaw-auth-profiles.json
+    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_auth_profiles_json=$(cat /tmp/openclaw-auth-profiles.json)"
+fi
 
 # Initialize Terraform
 echo "  Initializing Terraform..."
@@ -845,7 +1219,7 @@ echo "  Analyzing deployment plan..."
 echo ""
 
 set +e
-PLAN_OUTPUT=$(terraform plan -input=false -out=tfplan -detailed-exitcode 2>&1)
+PLAN_OUTPUT=$(eval terraform plan -input=false -out=tfplan -detailed-exitcode $TF_VAR_ARGS 2>&1)
 PLAN_EXIT=$?
 set -e
 
@@ -888,7 +1262,7 @@ fi
 # Show what will be destroyed - THIS IS CRITICAL
 if [ "$DESTROY_COUNT" != "0" ]; then
     echo -e "${RED}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║  ⚠️  WARNING: RESOURCES WILL BE DESTROYED!                    ║${NC}"
+    echo -e "${RED}║  WARNING: RESOURCES WILL BE DESTROYED!                        ║${NC}"
     echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${RED}The following resources will be PERMANENTLY DELETED:${NC}"
@@ -901,7 +1275,7 @@ if [ "$DESTROY_COUNT" != "0" ]; then
     echo ""
     echo "Type 'DESTROY' to confirm you want to destroy these resources:"
     read -p "> " DESTROY_CONFIRM
-    
+
     if [ "$DESTROY_CONFIRM" != "DESTROY" ]; then
         echo ""
         echo "Aborted. You did not confirm destruction."
@@ -933,16 +1307,19 @@ terraform apply -auto-approve tfplan
 # Get instance ID
 INSTANCE_ID=$(terraform output -raw instance_id)
 
+# Clean up temp files
+rm -f /tmp/openclaw-config.json /tmp/openclaw-env /tmp/openclaw-auth-profiles.json
+
 echo ""
 echo -e "${GREEN}✓ Infrastructure deployed successfully!${NC}"
 echo -e "  Instance ID: ${GREEN}$INSTANCE_ID${NC}"
 echo ""
 
 #═══════════════════════════════════════════════════════════════════════
-# STEP 6: Wait for Instance
+# STEP 8: Wait for Instance
 #═══════════════════════════════════════════════════════════════════════
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}STEP 6/6: Waiting for Instance${NC}"
+echo -e "${YELLOW}STEP 8/$TOTAL_STEPS: Waiting for Instance${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -950,8 +1327,12 @@ echo "  Waiting for EC2 instance to be ready..."
 aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID" --region "$AWS_REGION"
 echo -e "  ${GREEN}✓ Instance is running${NC}"
 
-echo "  Waiting for OpenClaw to install (60 seconds)..."
-sleep 60
+echo -n "  Waiting for cloud-init to complete (this takes ~2 minutes)..."
+for i in $(seq 1 12); do
+    sleep 10
+    echo -n "."
+done
+echo ""
 echo -e "  ${GREEN}✓ Installation complete${NC}"
 
 echo ""
@@ -962,40 +1343,80 @@ echo ""
 echo -e "${GREEN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                                                               ║"
-echo "║               INFRASTRUCTURE DEPLOYED! 🎉                     ║"
+echo "║                    DEPLOYED! 🎉                               ║"
 echo "║                                                               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
-echo -e "  ${BLUE}Instance ID:${NC}  $INSTANCE_ID"
-echo -e "  ${BLUE}Region:${NC}       $AWS_REGION"
-echo -e "  ${BLUE}Account:${NC}      $AWS_ACCOUNT_ID"
+echo -e "  ${BLUE}Instance ID:${NC}      $INSTANCE_ID"
+echo -e "  ${BLUE}Region:${NC}           $AWS_REGION"
+echo -e "  ${BLUE}Account:${NC}          $AWS_ACCOUNT_ID"
+echo -e "  ${BLUE}Deployment Name:${NC}  $DEPLOYMENT_NAME"
 echo ""
+
+if [ -n "$CONFIG_JSON" ] || [ -n "$ENV_CONTENT" ]; then
+    # Config was provided — show configured output
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  OpenClaw is pre-configured and starting up now.${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  1. Check install progress:"
+    echo ""
+    echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION${NC}"
+    echo -e "     ${CYAN}tail -f /var/log/openclaw-install.log${NC}"
+    echo ""
+    echo "  2. View gateway logs:"
+    echo ""
+    echo -e "     ${CYAN}sudo -u openclaw journalctl --user -u openclaw-gateway -f${NC}"
+    echo ""
+    echo "  3. Open dashboard via SSM port forward:"
+    echo ""
+    echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION \\${NC}"
+    echo -e "     ${CYAN}  --document-name AWS-StartPortForwardingSession \\${NC}"
+    echo -e "     ${CYAN}  --parameters '{\"portNumber\":[\"18789\"],\"localPortNumber\":[\"18789\"]}'${NC}"
+    echo ""
+    echo -e "     ${CYAN}http://localhost:18789/${NC}"
+    echo ""
+    echo "  4. Message your bot!"
+    echo ""
+else
+    # No config — show manual onboard instructions
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  NEXT STEP: Configure OpenClaw${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  1. Connect to your instance:"
+    echo ""
+    echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION${NC}"
+    echo ""
+    echo "  2. Initialize OpenClaw (enter your API keys when prompted):"
+    echo ""
+    echo -e "     ${CYAN}sudo -u openclaw openclaw onboard --install-daemon${NC}"
+    echo ""
+    echo "  3. Open dashboard locally (SSM port forward):"
+    echo ""
+    echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION \\${NC}"
+    echo -e "     ${CYAN}  --document-name AWS-StartPortForwardingSession \\${NC}"
+    echo -e "     ${CYAN}  --parameters '{\"portNumber\":[\"18789\"],\"localPortNumber\":[\"18789\"]}'${NC}"
+    echo ""
+    echo -e "     ${CYAN}http://localhost:18789/${NC}"
+    echo -e "     ${CYAN}Token: sudo -u openclaw openclaw config get gateway.auth.token${NC}"
+    echo ""
+    echo "  4. Message your bot!"
+    echo ""
+fi
+
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}  NEXT STEP: Configure OpenClaw${NC}"
+echo -e "${YELLOW}  TEAR DOWN & REBUILD${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "  1. Connect to your instance:"
+echo "  # Destroy everything and start over:"
+echo -e "  ${CYAN}./setup.sh --destroy${NC}"
 echo ""
-echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION${NC}"
+echo "  # Then re-deploy:"
+echo -e "  ${CYAN}./setup.sh${NC}"
 echo ""
-echo "  2. Initialize OpenClaw (enter your API keys when prompted):"
-echo ""
-echo -e "     ${CYAN}sudo -u openclaw openclaw onboard --install-daemon${NC}"
-echo ""
-echo "  3. Open dashboard locally (SSM port forward):"
-echo ""
-echo -e "     ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION \\\"${NC}"
-echo -e "     ${CYAN}  --document-name AWS-StartPortForwardingSession \\\"${NC}"
-echo -e "     ${CYAN}  --parameters '{\"portNumber\":[\"18789\"],\"localPortNumber\":[\"18789\"]}'${NC}"
-echo ""
-echo -e "     ${CYAN}http://localhost:18789/${NC}"
-echo -e "     ${CYAN}Token: sudo -u openclaw openclaw config get gateway.auth.token${NC}"
-echo ""
-echo "  4. Message your bot!"
-echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
+
 echo "Other useful commands:"
 echo ""
 echo "  # View logs (user service)"
@@ -1003,7 +1424,4 @@ echo "  sudo -u openclaw journalctl --user -u openclaw-gateway -f"
 echo ""
 echo "  # Restart OpenClaw (user service)"
 echo "  sudo -u openclaw systemctl --user restart openclaw-gateway"
-echo ""
-echo "  # Destroy infrastructure"
-echo "  cd $(pwd) && terraform destroy"
 echo ""

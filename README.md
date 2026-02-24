@@ -1,6 +1,8 @@
 # OpenClaw on AWS
 
-One command to deploy OpenClaw on AWS — either as a blank instance you configure manually, or fully pre-configured at boot using the same config artifacts as [mac-mini-setup](https://github.com/openclaw/mac-mini-setup).
+One command to deploy OpenClaw on AWS. The setup wizard collects everything inline — from API keys to channel tokens — and generates the Terraform config. No manual SSH or `openclaw onboard` needed.
+
+For advanced users with an existing [mac-mini-setup](https://github.com/openclaw/mac-mini-setup) repo, see [Advanced Deployment](#advanced-deployment) below.
 
 ## Cost (On-Demand, eu-central-1)
 
@@ -14,7 +16,7 @@ Estimated monthly total: ~$27.39 (~$27/month)
 Excludes data transfer, snapshots, and any optional add-ons. Always review the latest AWS pricing for your region.
 Pricing varies by region and instance size; adjust `instance_type` and `ebs_volume_size` in [terraform/variables.tf](terraform/variables.tf).
 
-## Quick Start
+## Quick Start (First Time)
 
 ```bash
 git clone https://github.com/janobarnard/openclaw-aws.git
@@ -22,25 +24,25 @@ cd openclaw-aws
 ./setup.sh
 ```
 
-## What the Wizard Does
+The wizard walks you through:
 
-The interactive wizard walks through the deployment flow:
-
-1. **Checks prerequisites** — Terraform, AWS CLI
+1. **Checks prerequisites** — Terraform, AWS CLI, jq
 2. **Verifies AWS access** — Current account, profile, or assume-role
 3. **Selects region** — Frankfurt, N. Virginia, or Oregon
-4. **Scans for existing resources** — OpenClaw tags and local state
-5. **Summarizes the plan** — Shows resources to create and asks for confirmation
-6. **Deploys infrastructure** — VPC, subnet, IGW, SG, IAM, EC2
-7. **Waits for instance readiness** — Confirms EC2 is ready and OpenClaw is installed
+4. **Names your deployment** — Used for all AWS resource tags (e.g. `my-openclaw`)
+5. **Configures OpenClaw** — Quick setup (enter API key + channel token inline), point to config files, or skip
+6. **Scans for existing resources** — Checks for conflicts using your deployment name
+7. **Deploys infrastructure** — VPC, subnet, IGW, SG, IAM, EC2
+8. **Waits for instance readiness** — Confirms EC2 is ready and OpenClaw is installed
 
-After the wizard finishes, connect over SSM and run onboarding as the `openclaw` user. The subnet is pinned to an availability zone that supports the selected instance type.
+If you choose **Quick Setup** in step 5, the wizard generates `openclaw.json` and `.env` inline from your answers. The instance boots fully configured — no SSM-in-and-onboard step needed.
 
 ## Prerequisites
 
 ```bash
 # Install Terraform (https://terraform.io/downloads)
 # Install AWS CLI (https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+# Install jq (https://jqlang.github.io/jq/download/)
 # Install SSM Session Manager plugin if missing (https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
 # Configure AWS credentials
 aws configure
@@ -49,14 +51,24 @@ aws configure
 ## What You Need
 
 - AWS account with admin access
-- At least one chat channel token (Telegram, Slack, Discord, WhatsApp, etc.)
-- At least one LLM provider API key (OpenAI, Anthropic, etc.)
+- At least one chat channel token (Discord or Telegram)
+- At least one LLM provider API key (Anthropic or OpenAI)
+
+## Tear Down & Rebuild
+
+```bash
+# Destroy everything
+./setup.sh --destroy
+
+# Re-deploy from scratch
+./setup.sh
+```
 
 ---
 
-## Pre-Configured Deployment
+## Advanced Deployment
 
-Deploy OpenClaw fully configured at boot — no manual `openclaw onboard` needed. All config, workspace files, and skills come from the companion [mac-mini-setup](https://github.com/openclaw/mac-mini-setup) repo. This repo contains only Terraform infrastructure files.
+Deploy OpenClaw fully configured at boot using the companion [mac-mini-setup](https://github.com/openclaw/mac-mini-setup) repo. This gives you full control over workspace files, custom skills, cron jobs, and auth profiles.
 
 ### Two Ways to Source Content
 
@@ -98,7 +110,7 @@ Both repos cloned as siblings under `~/projects/`:
 
 `mac-mini-setup` is the single source of truth. The `terraform.tfvars` wires it to the instance using `file()` references — no content lives in this repo.
 
-### Workflow
+### Advanced Workflow
 
 **1. Clone both repos:**
 
@@ -129,7 +141,7 @@ These three files are gitignored in mac-mini-setup and never committed.
 
 ```bash
 cd ~/projects/openclaw-terraform-aws/terraform
-cp terraform.tfvars.example terraform.tfvars
+cp terraform.tfvars.advanced.example terraform.tfvars
 # All file() paths already point to ../../mac-mini-setup/
 # Edit owner_name, timezone, region, or skill lists as needed.
 ```
@@ -191,13 +203,13 @@ workspace_files = {
 }
 ```
 
-Files are written to `/home/openclaw/.openclaw/workspace/` on the instance. See `terraform.tfvars.example` for the complete list.
+Files are written to `/home/openclaw/.openclaw/workspace/` on the instance. See `terraform.tfvars.advanced.example` for the complete list.
 
-If `scripts/pre-commit-secrets.sh` is included, it is automatically installed as the git pre-commit hook for the `~/.openclaw` repo (see [Pre-commit Hook](#pre-commit-hook) below).
+If `scripts/pre-commit-secrets.sh` is included, it is automatically installed as the git pre-commit hook for the `~/.openclaw` repo.
 
 ### Custom Skills
 
-Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of file paths to contents, supporting nested paths (e.g. `scripts/check.sh`, `references/response-playbook.md`):
+Deploy custom skill directories to `~/.openclaw/skills/`. Each skill is a map of file paths to contents, supporting nested paths:
 
 ```hcl
 custom_skills = {
@@ -212,8 +224,6 @@ custom_skills = {
 }
 ```
 
-Skills land at `/home/openclaw/.openclaw/skills/<skill-name>/` on the instance. See `terraform.tfvars.example` for all skills.
-
 ### Cron Jobs
 
 Write cron job JSON specs to `~/.openclaw/workspace/cron-jobs/`. After the instance is up, ask OpenClaw to register them:
@@ -225,24 +235,9 @@ cron_jobs = {
 }
 ```
 
-To register after deploy:
+### clawhub Skills
 
-```
-"Please register the cron jobs in ~/.openclaw/workspace/cron-jobs/"
-```
-
-### Pre-commit Hook
-
-If `workspace_files` includes `scripts/pre-commit-secrets.sh`, cloud-init will:
-
-1. Initialize `~/.openclaw` as a git repo (if not already)
-2. Install the script as `.git/hooks/pre-commit`
-
-This mirrors the mac-mini-setup pre-commit secrets guard on the cloud instance.
-
-### Skills
-
-Pre-install clawhub skills at boot (match this to `bootstrap-openclaw-workspace.sh` in mac-mini-setup):
+Pre-install clawhub skills at boot:
 
 ```hcl
 clawhub_skills = [
@@ -266,7 +261,9 @@ extra_packages = ["golang", "python3-pip", "chromium"]
 
 ## Security
 
-**Secrets in Terraform state**: All three config variables are marked `sensitive = true`, which prevents them from appearing in plan/apply output. However, Terraform state files contain all variable values. Ensure your state backend is encrypted (S3 with SSE, Terraform Cloud, etc.).
+**Secrets in Terraform state**: All config variables are marked `sensitive = true`, which prevents them from appearing in plan/apply output. However, Terraform state files contain all variable values. Ensure your state backend is encrypted (S3 with SSE, Terraform Cloud, etc.).
+
+**Wizard secrets handling**: The setup wizard writes secrets only to `/tmp/` temp files and passes them via `-var` flags. Temp files are cleaned up after apply. No secrets are written to the repo directory.
 
 **Recommended approach**: Store your config files in `mac-mini-setup` and reference them with `file()`:
 ```hcl
@@ -274,8 +271,6 @@ openclaw_config_json = file("../../mac-mini-setup/openclaw-secrets.json")
 ```
 
 The secrets files (`openclaw-secrets.*`, `openclaw-auth-profiles.json`) are gitignored in mac-mini-setup and never committed to either repo.
-
-**Alternative**: Use AWS Secrets Manager to store config values and inject them via IAM at runtime. This avoids secrets ever touching Terraform state.
 
 ---
 
@@ -297,9 +292,6 @@ sudo -u openclaw journalctl --user -u openclaw-gateway -f
 # Restart gateway (user service)
 sudo -u openclaw systemctl --user restart openclaw-gateway
 
-# If a skill install fails due to missing Go (example: blogwatcher)
-sudo dnf install -y golang
-
 # Access dashboard locally via SSM port-forwarding (run from your machine)
 aws ssm start-session \
 	--target <instance-id> \
@@ -313,7 +305,7 @@ aws ssm start-session \
 # sudo -u openclaw openclaw config get gateway.auth.token
 
 # Destroy everything
-cd terraform && terraform destroy
+./setup.sh --destroy
 ```
 
 ## License

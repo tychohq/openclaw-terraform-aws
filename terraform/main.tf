@@ -18,7 +18,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "OpenClaw"
+      Project     = var.deployment_name
       Environment = var.environment
       ManagedBy   = "Terraform"
     }

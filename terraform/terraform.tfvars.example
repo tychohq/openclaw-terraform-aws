@@ -1,209 +1,36 @@
-# terraform.tfvars — Pre-configured OpenClaw deployment.
-# Copy to terraform.tfvars and verify all file() paths exist.
-# NEVER commit terraform.tfvars — it is gitignored.
-#
-# Expected directory layout (both repos cloned as siblings):
-#
-#   ~/projects/
-#   ├── mac-mini-setup/                       # Source of truth for all OpenClaw content
-#   │   ├── openclaw-secrets.json             # Fill in from config/openclaw-config.template.json
-#   │   ├── openclaw-secrets.env              # Fill in from config/openclaw-env.template
-#   │   ├── openclaw-auth-profiles.json       # Fill in from config/openclaw-auth-profiles.template.json
-#   │   ├── openclaw-workspace/
-#   │   │   ├── SOUL.md
-#   │   │   ├── USER.md
-#   │   │   ├── AGENTS.md
-#   │   │   ├── IDENTITY.md
-#   │   │   ├── TOOLS.md
-#   │   │   ├── MEMORY.md
-#   │   │   ├── docs/
-#   │   │   ├── tools/
-#   │   │   ├── scripts/
-#   │   │   └── bootstrap/
-#   │   ├── openclaw-skills/
-#   │   │   ├── answeroverflow/
-#   │   │   ├── clawdstrike/
-#   │   │   │   ├── references/
-#   │   │   │   └── scripts/
-#   │   │   ├── cron-setup/
-#   │   │   ├── doc-layers/
-#   │   │   ├── email/
-#   │   │   ├── gog/
-#   │   │   ├── self-reflection/
-#   │   │   └── system-watchdog/
-#   │   └── cron-jobs/
-#   └── openclaw-terraform-aws/               # This repo (Terraform only — no content)
-#       └── terraform/
-#           └── terraform.tfvars              # ← you are here; all paths use ../../mac-mini-setup/
-#
-# All file() paths are relative to the terraform/ directory.
+# Simple deployment — fill in the basics, deploy, done.
+# For advanced config with workspace files and skills, see terraform.tfvars.advanced.example
 
-aws_region  = "us-east-1"
-environment = "prod"
+aws_region      = "us-east-1"
+deployment_name = "my-openclaw"
+owner_name      = "Your Name"
+timezone        = "America/New_York"
 
-# ── Instance ───────────────────────────────────────────────────────────────────
+# ── Minimal config — just API key + channel ──────────────────────────────────
+# Generate your own gateway token: openssl rand -hex 24
 
-instance_type   = "t4g.medium"
-ebs_volume_size = 30
-
-# ── Owner ──────────────────────────────────────────────────────────────────────
-
-owner_name = "Your Name"
-timezone   = "America/New_York"
-
-# ── OpenClaw Config ────────────────────────────────────────────────────────────
-#
-# Fill in the template files from mac-mini-setup/config/ and save them to the
-# mac-mini-setup root. They are gitignored there and never committed.
-#
-#   config/openclaw-config.template.json        → openclaw-secrets.json
-#   config/openclaw-env.template                → openclaw-secrets.env
-#   config/openclaw-auth-profiles.template.json → openclaw-auth-profiles.json
-
-openclaw_config_json        = file("../../mac-mini-setup/openclaw-secrets.json")
-openclaw_env                = file("../../mac-mini-setup/openclaw-secrets.env")
-openclaw_auth_profiles_json = file("../../mac-mini-setup/openclaw-auth-profiles.json")
-
-# ── Workspace Seed Files ───────────────────────────────────────────────────────
-#
-# Written to /home/openclaw/.openclaw/workspace/ on the instance.
-# Parent directories are created automatically.
-
-workspace_files = {
-  # Root-level identity/config files
-  "SOUL.md"     = file("../../mac-mini-setup/openclaw-workspace/SOUL.md")
-  "USER.md"     = file("../../mac-mini-setup/openclaw-workspace/USER.md")
-  "AGENTS.md"   = file("../../mac-mini-setup/openclaw-workspace/AGENTS.md")
-  "IDENTITY.md" = file("../../mac-mini-setup/openclaw-workspace/IDENTITY.md")
-  "TOOLS.md"    = file("../../mac-mini-setup/openclaw-workspace/TOOLS.md")
-  "MEMORY.md"   = file("../../mac-mini-setup/openclaw-workspace/MEMORY.md")
-
-  # docs/
-  "docs/openclaw-playbook.md" = file("../../mac-mini-setup/openclaw-workspace/docs/openclaw-playbook.md")
-  "docs/doc-layers.md"        = file("../../mac-mini-setup/openclaw-workspace/docs/doc-layers.md")
-
-  # tools/
-  "tools/browser.md"       = file("../../mac-mini-setup/openclaw-workspace/tools/browser.md")
-  "tools/discord.md"       = file("../../mac-mini-setup/openclaw-workspace/tools/discord.md")
-  "tools/docker.md"        = file("../../mac-mini-setup/openclaw-workspace/tools/docker.md")
-  "tools/pdf.md"           = file("../../mac-mini-setup/openclaw-workspace/tools/pdf.md")
-  "tools/uv-python.md"     = file("../../mac-mini-setup/openclaw-workspace/tools/uv-python.md")
-  "tools/async-polling.md" = file("../../mac-mini-setup/openclaw-workspace/tools/async-polling.md")
-
-  # scripts/
-  "scripts/error-digest.sh"      = file("../../mac-mini-setup/openclaw-workspace/scripts/error-digest.sh")
-  "scripts/md2pdf.sh"             = file("../../mac-mini-setup/openclaw-workspace/scripts/md2pdf.sh")
-  "scripts/pre-commit-secrets.sh" = file("../../mac-mini-setup/openclaw-workspace/scripts/pre-commit-secrets.sh")
-
-  # bootstrap/
-  "bootstrap/discord-setup.md" = file("../../mac-mini-setup/openclaw-workspace/bootstrap/discord-setup.md")
-  "bootstrap/README.md"        = file("../../mac-mini-setup/openclaw-workspace/bootstrap/README.md")
-  "bootstrap/secrets-guide.md" = file("../../mac-mini-setup/openclaw-workspace/bootstrap/secrets-guide.md")
-  "bootstrap/setup-context.md" = file("../../mac-mini-setup/openclaw-workspace/bootstrap/setup-context.md")
-  "bootstrap/TODO.md"          = file("../../mac-mini-setup/openclaw-workspace/bootstrap/TODO.md")
-}
-
-# ── Custom Skills ──────────────────────────────────────────────────────────────
-#
-# Deployed to /home/openclaw/.openclaw/skills/<skill-name>/ on the instance.
-# Supports nested paths (scripts/, references/, etc.) — parent dirs created automatically.
-
-custom_skills = {
-  "answeroverflow" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/answeroverflow/SKILL.md")
+openclaw_config_json = jsonencode({
+  gateway = {
+    auth = { token = "YOUR_GATEWAY_TOKEN" }
+    port = 18789
   }
-
-  "clawdstrike" = {
-    "SKILL.md"                              = file("../../mac-mini-setup/openclaw-skills/clawdstrike/SKILL.md")
-    "references/canvas-browser.md"          = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/canvas-browser.md")
-    "references/channels.md"                = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/channels.md")
-    "references/config-keys.md"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/config-keys.md")
-    "references/discovery.md"               = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/discovery.md")
-    "references/evidence-template.md"       = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/evidence-template.md")
-    "references/filesystem.md"              = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/filesystem.md")
-    "references/gateway.md"                 = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/gateway.md")
-    "references/network.md"                 = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/network.md")
-    "references/redaction.md"               = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/redaction.md")
-    "references/report-format.md"           = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/report-format.md")
-    "references/required-checks.md"         = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/required-checks.md")
-    "references/supply-chain.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/supply-chain.md")
-    "references/threat-model.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/threat-model.md")
-    "references/tools.md"                   = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/tools.md")
-    "references/verified-allowlist.md"      = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/verified-allowlist.md")
-    "references/version-risk.md"            = file("../../mac-mini-setup/openclaw-skills/clawdstrike/references/version-risk.md")
-    "scripts/collect_verified.sh"           = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/collect_verified.sh")
-    "scripts/config_summary.py"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/config_summary.py")
-    "scripts/redact_helpers.sh"             = file("../../mac-mini-setup/openclaw-skills/clawdstrike/scripts/redact_helpers.sh")
+  channels = {
+    discord = {
+      enabled     = true
+      token       = "YOUR_DISCORD_BOT_TOKEN"
+      groupPolicy = "allowlist"
+      dmPolicy    = "pairing"
+      allowFrom   = ["YOUR_DISCORD_USER_ID"]
+      guilds = {
+        "YOUR_GUILD_ID" = {
+          requireMention = false
+        }
+      }
+    }
   }
+})
 
-  "cron-setup" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/cron-setup/SKILL.md")
-  }
-
-  "doc-layers" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/doc-layers/SKILL.md")
-  }
-
-  "email" = {
-    "SKILL.md" = file("../../mac-mini-setup/openclaw-skills/email/SKILL.md")
-  }
-
-  "gog" = {
-    "SKILL.md"  = file("../../mac-mini-setup/openclaw-skills/gog/SKILL.md")
-    "SETUP.md"  = file("../../mac-mini-setup/openclaw-skills/gog/SETUP.md")
-  }
-
-  "self-reflection" = {
-    "SKILL.md"                      = file("../../mac-mini-setup/openclaw-skills/self-reflection/SKILL.md")
-    "scripts/summarize-sessions.sh" = file("../../mac-mini-setup/openclaw-skills/self-reflection/scripts/summarize-sessions.sh")
-  }
-
-  "system-watchdog" = {
-    "SKILL.md"  = file("../../mac-mini-setup/openclaw-skills/system-watchdog/SKILL.md")
-    "check.sh"  = file("../../mac-mini-setup/openclaw-skills/system-watchdog/check.sh")
-  }
-}
-
-# ── Cron Jobs ──────────────────────────────────────────────────────────────────
-#
-# Written to /home/openclaw/.openclaw/workspace/cron-jobs/<name>.json.
-# After deploy, ask OpenClaw to register them:
-#   "Please register the cron jobs in ~/.openclaw/workspace/cron-jobs/"
-
-cron_jobs = {
-  "self-reflection"       = file("../../mac-mini-setup/cron-jobs/self-reflection.json")
-  "system-watchdog"       = file("../../mac-mini-setup/cron-jobs/system-watchdog.json")
-  "daily-workspace-commit" = file("../../mac-mini-setup/cron-jobs/daily-workspace-commit.json")
-  "error-log-digest"      = file("../../mac-mini-setup/cron-jobs/error-log-digest.json")
-  "cron-health-watchdog"  = file("../../mac-mini-setup/cron-jobs/cron-health-watchdog.json")
-}
-
-# ── Skills ─────────────────────────────────────────────────────────────────────
-#
-# clawhub skills pre-installed at boot via `clawhub install <skill>`.
-# Match this list to bootstrap-openclaw-workspace.sh in mac-mini-setup.
-
-clawhub_skills = [
-  "agent-browser",
-  "architecture-research",
-  "caddy",
-  "commit",
-  "create-mcp",
-  "deslop",
-  "dev-serve",
-  "diagrams",
-  "domain-check",
-  "merge-upstream",
-  "modal",
-  "new-brain-dump",
-  "process-brain-dump",
-  "research",
-  "supabase",
-  "tmux",
-  "ui-scaffold",
-  "vercel",
-]
-
-# ── Extra System Packages ──────────────────────────────────────────────────────
-
-extra_packages = ["golang", "python3-pip", "chromium"]
+openclaw_env = <<-EOT
+  ANTHROPIC_API_KEY=sk-ant-...
+  GATEWAY_AUTH_TOKEN=YOUR_GATEWAY_TOKEN
+EOT

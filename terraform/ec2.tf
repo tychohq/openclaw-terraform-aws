@@ -35,7 +35,7 @@ resource "aws_instance" "openclaw" {
     delete_on_termination = true
 
     tags = {
-      Name = "${var.project_name}-root-volume"
+      Name = "${var.deployment_name}-root-volume"
     }
   }
 
@@ -60,7 +60,7 @@ resource "aws_instance" "openclaw" {
   }))
 
   tags = {
-    Name = "${var.project_name}-instance"
+    Name = "${var.deployment_name}-instance"
   }
 
   lifecycle {

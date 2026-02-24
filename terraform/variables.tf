@@ -12,10 +12,15 @@ variable "environment" {
   default     = "prod"
 }
 
-variable "project_name" {
-  description = "Project name for resource naming"
+variable "deployment_name" {
+  description = "Name for this deployment (used in resource naming and tags). Lowercase alphanumeric + hyphens."
   type        = string
   default     = "openclaw"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,23}$", var.deployment_name))
+    error_message = "deployment_name must start with a letter, be lowercase alphanumeric/hyphens, max 24 chars."
+  }
 }
 
 variable "instance_type" {

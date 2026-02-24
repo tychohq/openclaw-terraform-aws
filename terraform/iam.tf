@@ -1,7 +1,7 @@
 # IAM - Minimal Deployment (SSM access only)
 
 resource "aws_iam_role" "ec2" {
-  name = "${var.project_name}-ec2-role"
+  name = "${var.deployment_name}-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -17,12 +17,12 @@ resource "aws_iam_role" "ec2" {
   })
 
   tags = {
-    Name = "${var.project_name}-ec2-role"
+    Name = "${var.deployment_name}-ec2-role"
   }
 }
 
 resource "aws_iam_instance_profile" "ec2" {
-  name = "${var.project_name}-ec2-profile"
+  name = "${var.deployment_name}-ec2-profile"
   role = aws_iam_role.ec2.name
 }
 
