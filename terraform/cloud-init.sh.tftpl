@@ -123,6 +123,11 @@ Name: ${owner_name}
 USERMD
 
 %{ endif ~}
+# ── Set Ownership (before git init — npm install runs as root) ────────────────
+
+chown -R openclaw:openclaw /home/openclaw
+chown -R openclaw:openclaw /home/openclaw/.config
+
 # ── Initialize .openclaw as Git Repo ─────────────────────────────────────────
 
 if [ ! -d /home/openclaw/.openclaw/.git ]; then
@@ -136,11 +141,6 @@ if [ -f /home/openclaw/.openclaw/workspace/scripts/pre-commit-secrets.sh ]; then
   chmod +x /home/openclaw/.openclaw/.git/hooks/pre-commit
   echo "[$(date)] Pre-commit hook installed."
 fi
-
-# ── Set Ownership ─────────────────────────────────────────────────────────────
-
-chown -R openclaw:openclaw /home/openclaw
-chown -R openclaw:openclaw /home/openclaw/.config
 
 # ── systemd User Service ──────────────────────────────────────────────────────
 
