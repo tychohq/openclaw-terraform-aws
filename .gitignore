@@ -3,6 +3,7 @@
 *.tfstate.*
 *.tfvars
 !terraform.tfvars.example
+!terraform.tfvars.advanced.example
 .terraform/
 .terraform.lock.hcl
 crash.log
@@ -22,7 +23,23 @@ tfplan
 .DS_Store
 Thumbs.db
 
+# TLDR (coding agent state)
+.tldr/
+.tldrignore
+
+# (PRDs live in meta/PRDs/)
+
 # Secrets (never commit)
 *.pem
 *.key
 secrets/
+openclaw-secrets.*
+openclaw-auth-profiles.json
+.env
+!.env.example
+
+# Content dirs — all content lives in mac-mini-setup, not here
+openclaw-workspace/
+openclaw-skills/
+cron-jobs/
+config/

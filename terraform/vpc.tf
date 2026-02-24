@@ -19,7 +19,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "${var.project_name}-vpc"
+    Name = "${var.deployment_name}-vpc"
   }
 }
 
@@ -27,7 +27,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.project_name}-igw"
+    Name = "${var.deployment_name}-igw"
   }
 }
 
@@ -38,7 +38,7 @@ resource "aws_subnet" "public" {
   availability_zone       = local.instance_az
 
   tags = {
-    Name = "${var.project_name}-public"
+    Name = "${var.deployment_name}-public"
   }
 }
 
@@ -51,7 +51,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${var.project_name}-public-rt"
+    Name = "${var.deployment_name}-public-rt"
   }
 }
 
@@ -65,6 +65,6 @@ resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.project_name}-default-sg-restricted"
+    Name = "${var.deployment_name}-default-sg-restricted"
   }
 }
