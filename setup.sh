@@ -1320,9 +1320,9 @@ PLAN_EXIT=$?
 set -e
 
 # Parse plan results
-ADD_COUNT=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to add)' || echo "0")
-CHANGE_COUNT=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to change)' || echo "0")
-DESTROY_COUNT=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to destroy)' || echo "0")
+ADD_COUNT=$(echo "$PLAN_OUTPUT" | grep -oE '[0-9]+ to add' | grep -oE '[0-9]+' || echo "0")
+CHANGE_COUNT=$(echo "$PLAN_OUTPUT" | grep -oE '[0-9]+ to change' | grep -oE '[0-9]+' || echo "0")
+DESTROY_COUNT=$(echo "$PLAN_OUTPUT" | grep -oE '[0-9]+ to destroy' | grep -oE '[0-9]+' || echo "0")
 
 ADD_COUNT=${ADD_COUNT:-0}
 CHANGE_COUNT=${CHANGE_COUNT:-0}
