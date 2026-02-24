@@ -1197,17 +1197,15 @@ EOF
 [ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
 [ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars
 
-# Build -var args for secrets (never written to repo)
-TF_VAR_ARGS=""
+# Pass secrets via TF_VAR_ environment variables (safe for JSON with special chars)
 if [ -f /tmp/openclaw-config.json ]; then
-    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_config_json=$(cat /tmp/openclaw-config.json)"
+    export TF_VAR_openclaw_config_json="$(cat /tmp/openclaw-config.json)"
 fi
 if [ -f /tmp/openclaw-env ]; then
-    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_env=$(cat /tmp/openclaw-env)"
+    export TF_VAR_openclaw_env="$(cat /tmp/openclaw-env)"
 fi
 if [ -n "${AUTH_PROFILES_JSON:-}" ]; then
-    echo "$AUTH_PROFILES_JSON" > /tmp/openclaw-auth-profiles.json
-    TF_VAR_ARGS="$TF_VAR_ARGS -var=openclaw_auth_profiles_json=$(cat /tmp/openclaw-auth-profiles.json)"
+    export TF_VAR_openclaw_auth_profiles_json="$AUTH_PROFILES_JSON"
 fi
 
 # Initialize Terraform
@@ -1219,7 +1217,7 @@ echo "  Analyzing deployment plan..."
 echo ""
 
 set +e
-PLAN_OUTPUT=$(eval terraform plan -input=false -out=tfplan -detailed-exitcode $TF_VAR_ARGS 2>&1)
+PLAN_OUTPUT=$(terraform plan -input=false -out=tfplan -detailed-exitcode 2>&1)
 PLAN_EXIT=$?
 set -e
 
