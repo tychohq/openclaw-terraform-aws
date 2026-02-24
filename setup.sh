@@ -1021,15 +1021,13 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         }')
     fi
 
-    # Add model config
+    # Add model config — use agents.defaults.model.primary (not agents.main)
     if [ -n "$ANTHROPIC_API_KEY" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
-        '.agents.main.model = "claude-sonnet-4-20250514" |
-         .agents.main.provider = "anthropic"')
+        '.agents.defaults.model.primary = "anthropic/claude-sonnet-4-20250514"')
     elif [ -n "$OPENAI_API_KEY" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
-        '.agents.main.model = "gpt-4o" |
-         .agents.main.provider = "openai"')
+        '.agents.defaults.model.primary = "openai/gpt-4o"')
     fi
 
     # Generate .env content
