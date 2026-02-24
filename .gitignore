@@ -27,8 +27,7 @@ Thumbs.db
 .tldr/
 .tldrignore
 
-# Working PRDs (internal)
-PRD*.md
+# (PRDs live in meta/PRDs/)
 
 # Secrets (never commit)
 *.pem
