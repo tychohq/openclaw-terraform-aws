@@ -36,6 +36,7 @@ secrets/
 openclaw-secrets.*
 openclaw-auth-profiles.json
 .env
+.env.*
 !.env.example
 
 # Content dirs — all content lives in mac-mini-setup, not here
