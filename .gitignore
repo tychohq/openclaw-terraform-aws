@@ -23,6 +23,13 @@ tfplan
 .DS_Store
 Thumbs.db
 
+# TLDR (coding agent state)
+.tldr/
+.tldrignore
+
+# Working PRDs (internal)
+PRD*.md
+
 # Secrets (never commit)
 *.pem
 *.key
