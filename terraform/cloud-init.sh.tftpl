@@ -155,7 +155,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h
-ExecStart=/usr/bin/openclaw gateway start
+ExecStart=/usr/bin/openclaw gateway
 Restart=always
 RestartSec=10
 %{ if openclaw_env_b64 != "" ~}
