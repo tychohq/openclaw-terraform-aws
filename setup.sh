@@ -188,7 +188,7 @@ fi
 #═══════════════════════════════════════════════════════════════════════
 # Banner
 #═══════════════════════════════════════════════════════════════════════
-clear
+[ "$AUTO_MODE" != true ] && clear
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                                                               ║"
@@ -791,6 +791,20 @@ TF_VAR_ARGS=""
 # Option 1: Quick Setup
 #-----------------------------------------------------------------------
 if [ "$CONFIG_CHOICE" = "1" ]; then
+
+    if [ "$AUTO_MODE" = true ]; then
+        # Auto mode: use .env vars directly, no prompts
+        ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+        OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+        DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
+        DISCORD_GUILD_ID="${DISCORD_GUILD_ID:-}"
+        DISCORD_CHANNEL_ID="${DISCORD_CHANNEL_ID:-}"
+        DISCORD_OWNER_ID="${DISCORD_OWNER_ID:-}"
+        TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+        TELEGRAM_OWNER_ID="${TELEGRAM_OWNER_ID:-}"
+        OWNER_NAME="${OWNER_NAME:-}"
+        TIMEZONE="${TIMEZONE:-America/New_York}"
+    else
     echo ""
     echo -e "${BLUE}── LLM Provider ──────────────────────────────${NC}"
     echo ""
@@ -950,6 +964,8 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     fi
     read -p "Timezone [$_ENV_TIMEZONE]: " _INPUT
     TIMEZONE="${_INPUT:-$_ENV_TIMEZONE}"
+
+    fi # end interactive Quick Setup
 
     # Generate config JSON with jq
     GATEWAY_TOKEN=$(openssl rand -hex 24)
@@ -1365,7 +1381,12 @@ if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
     echo "  1) Continue - I understand existing resources may be modified"
     echo "  2) Abort - Do not make any changes"
     echo ""
-    read -p "Choose [1-2]: " EXISTING_CHOICE
+    if [ "$AUTO_MODE" = true ]; then
+        echo -e "${YELLOW}--auto mode: continuing${NC}"
+        EXISTING_CHOICE="1"
+    else
+        read -p "Choose [1-2]: " EXISTING_CHOICE
+    fi
 
     if [ "$EXISTING_CHOICE" != "1" ]; then
         echo ""
@@ -1380,7 +1401,11 @@ if [ ${#EXISTING_OPENCLAW[@]} -gt 0 ]; then
 else
     echo -e "${GREEN}✓ No conflicts detected. Safe to proceed.${NC}"
     echo ""
-    read -p "Do you want to proceed with deployment? [y/N]: " PROCEED_CHOICE
+    if [ "$AUTO_MODE" = true ]; then
+        PROCEED_CHOICE="y"
+    else
+        read -p "Do you want to proceed with deployment? [y/N]: " PROCEED_CHOICE
+    fi
 
     if [[ ! $PROCEED_CHOICE =~ ^[Yy]$ ]]; then
         echo ""
@@ -1485,8 +1510,13 @@ if [ "$DESTROY_COUNT" != "0" ]; then
     echo ""
     echo -e "${RED}THIS ACTION CANNOT BE UNDONE!${NC}"
     echo ""
-    echo "Type 'DESTROY' to confirm you want to destroy these resources:"
-    read -p "> " DESTROY_CONFIRM
+    if [ "$AUTO_MODE" = true ]; then
+        echo -e "${YELLOW}--auto mode: skipping confirmation${NC}"
+        DESTROY_CONFIRM="DESTROY"
+    else
+        echo "Type 'DESTROY' to confirm you want to destroy these resources:"
+        read -p "> " DESTROY_CONFIRM
+    fi
 
     if [ "$DESTROY_CONFIRM" != "DESTROY" ]; then
         echo ""
@@ -1502,7 +1532,11 @@ echo "Summary: $ADD_COUNT to add, $CHANGE_COUNT to change, $DESTROY_COUNT to des
 echo ""
 echo -e "${YELLOW}This will make changes to AWS account $AWS_ACCOUNT_ID${NC}"
 echo ""
-read -p "Do you want to apply these changes? [y/N]: " APPLY_CONFIRM
+if [ "$AUTO_MODE" = true ]; then
+    APPLY_CONFIRM="y"
+else
+    read -p "Do you want to apply these changes? [y/N]: " APPLY_CONFIRM
+fi
 
 if [[ ! $APPLY_CONFIRM =~ ^[Yy]$ ]]; then
     echo ""
