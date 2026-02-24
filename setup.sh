@@ -14,6 +14,38 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOTAL_STEPS=8
+AUTO_MODE=false
+
+# Helper: prompt user or use default in auto mode
+# Usage: ask VAR_NAME "prompt text" "default_value"
+ask() {
+    local var_name="$1" prompt="$2" default="${3:-}"
+    if [ "$AUTO_MODE" = true ]; then
+        eval "$var_name=\"\$default\""
+    else
+        read -p "$prompt" _input
+        eval "$var_name=\"\${_input:-\$default}\""
+    fi
+}
+
+# Parse flags
+for arg in "$@"; do
+    case "$arg" in
+        --auto)   AUTO_MODE=true ;;
+        --destroy) ;; # handled below
+        --help|-h)
+            echo "Usage: ./setup.sh [--auto] [--destroy]"
+            echo ""
+            echo "  (no flags)  Interactive wizard — prompts for every setting"
+            echo "  --auto      Non-interactive — reads all values from .env, fails if incomplete"
+            echo "  --destroy   Tear down all infrastructure created by this deployment"
+            echo ""
+            echo "The .env file pre-fills wizard defaults and is required for --auto."
+            echo "Copy .env.example to .env and fill in your values."
+            exit 0
+            ;;
+    esac
+done
 
 # Source .env if it exists (pre-fills wizard prompts)
 if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -22,12 +54,75 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     set +a
     echo -e "${CYAN}Loaded .env file (values will be used as defaults)${NC}"
     echo ""
+elif [ "$AUTO_MODE" = true ]; then
+    echo -e "${RED}Error: --auto requires a .env file but none found.${NC}"
+    echo "Copy .env.example to .env and fill in your values."
+    exit 1
+fi
+
+#═══════════════════════════════════════════════════════════════════════
+# --auto mode: validate .env has everything we need
+#═══════════════════════════════════════════════════════════════════════
+if [ "$AUTO_MODE" = true ]; then
+    MISSING=()
+
+    # Required fields
+    [ -z "${DEPLOYMENT_NAME:-}" ] && MISSING+=("DEPLOYMENT_NAME  (e.g. my-openclaw)")
+    [ -z "${AWS_REGION:-}" ]      && MISSING+=("AWS_REGION       (e.g. us-east-1)")
+
+    # Need at least one LLM provider
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+        MISSING+=("ANTHROPIC_API_KEY or OPENAI_API_KEY  (at least one required)")
+    fi
+
+    # Need at least one channel
+    HAS_DISCORD=false
+    HAS_TELEGRAM=false
+
+    if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
+        HAS_DISCORD=true
+        [ -z "${DISCORD_GUILD_ID:-}" ] && MISSING+=("DISCORD_GUILD_ID  (required when DISCORD_BOT_TOKEN is set)")
+        [ -z "${DISCORD_OWNER_ID:-}" ] && MISSING+=("DISCORD_OWNER_ID  (required when DISCORD_BOT_TOKEN is set)")
+    fi
+
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+        HAS_TELEGRAM=true
+        [ -z "${TELEGRAM_OWNER_ID:-}" ] && MISSING+=("TELEGRAM_OWNER_ID (required when TELEGRAM_BOT_TOKEN is set)")
+    fi
+
+    if [ "$HAS_DISCORD" = false ] && [ "$HAS_TELEGRAM" = false ]; then
+        MISSING+=("DISCORD_BOT_TOKEN or TELEGRAM_BOT_TOKEN  (at least one channel required)")
+    fi
+
+    # Validate deployment name format
+    if [ -n "${DEPLOYMENT_NAME:-}" ]; then
+        if ! echo "$DEPLOYMENT_NAME" | grep -qE '^[a-z][a-z0-9-]{0,23}$'; then
+            MISSING+=("DEPLOYMENT_NAME  (must be lowercase alphanumeric/hyphens, start with letter, max 24 chars — got: '$DEPLOYMENT_NAME')")
+        fi
+    fi
+
+    if [ ${#MISSING[@]} -gt 0 ]; then
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}  Missing required .env values for --auto mode${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        for field in "${MISSING[@]}"; do
+            echo -e "  ${RED}✗${NC} $field"
+        done
+        echo ""
+        echo "Edit your .env file and re-run:  ./setup.sh --auto"
+        echo "Or run without --auto for the interactive wizard."
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ .env validated — all required values present${NC}"
+    echo ""
 fi
 
 #═══════════════════════════════════════════════════════════════════════
 # --destroy flag
 #═══════════════════════════════════════════════════════════════════════
-if [ "${1:-}" = "--destroy" ]; then
+if [[ " $* " == *" --destroy "* ]] || [ "${1:-}" = "--destroy" ]; then
     echo ""
     echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${RED}  DESTROY OpenClaw Infrastructure${NC}"
@@ -64,7 +159,13 @@ if [ "${1:-}" = "--destroy" ]; then
     echo ""
     echo -e "${RED}THIS ACTION CANNOT BE UNDONE!${NC}"
     echo ""
-    read -p "Type 'DESTROY' to confirm: " DESTROY_CONFIRM
+
+    if [ "$AUTO_MODE" = true ]; then
+        echo -e "${YELLOW}--auto mode: skipping confirmation${NC}"
+        DESTROY_CONFIRM="DESTROY"
+    else
+        read -p "Type 'DESTROY' to confirm: " DESTROY_CONFIRM
+    fi
 
     if [ "$DESTROY_CONFIRM" != "DESTROY" ]; then
         echo ""
@@ -188,13 +289,17 @@ echo -e "  Current Account:  ${GREEN}$AWS_ACCOUNT_ID${NC}"
 echo -e "  Current User:     ${GREEN}$AWS_USER${NC}"
 echo ""
 
-echo "Where do you want to deploy OpenClaw?"
-echo ""
-echo "  1) Use current account ($AWS_ACCOUNT_ID)"
-echo "  2) Use a different AWS profile"
-echo "  3) Assume role in a different account"
-echo ""
-read -p "Choose [1-3, default 1]: " ACCOUNT_CHOICE
+if [ "$AUTO_MODE" = true ]; then
+    ACCOUNT_CHOICE="1"
+else
+    echo "Where do you want to deploy OpenClaw?"
+    echo ""
+    echo "  1) Use current account ($AWS_ACCOUNT_ID)"
+    echo "  2) Use a different AWS profile"
+    echo "  3) Assume role in a different account"
+    echo ""
+    read -p "Choose [1-3, default 1]: " ACCOUNT_CHOICE
+fi
 
 #-----------------------------------------------------------------------
 # Option 2: Use a different AWS profile
@@ -594,7 +699,10 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}STEP 3/$TOTAL_STEPS: Select AWS Region${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-if [ -n "${AWS_REGION:-}" ]; then
+if [ "$AUTO_MODE" = true ]; then
+    # AWS_REGION already set from .env (validated above)
+    true
+elif [ -n "${AWS_REGION:-}" ]; then
     echo -e "Region from .env: ${GREEN}$AWS_REGION${NC}"
     echo ""
     read -p "Use $AWS_REGION? [Y/n]: " REGION_CONFIRM
@@ -603,7 +711,7 @@ if [ -n "${AWS_REGION:-}" ]; then
     fi
 fi
 
-if [ -z "${AWS_REGION:-}" ]; then
+if [ "$AUTO_MODE" != true ] && [ -z "${AWS_REGION:-}" ]; then
     echo "Choose where to deploy OpenClaw:"
     echo ""
     echo "  1) us-east-1     (N. Virginia, US East)"
@@ -630,14 +738,18 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}STEP 4/$TOTAL_STEPS: Name Your Deployment${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "Give this deployment a name. Used for AWS resource tags"
-echo "and to distinguish multiple deployments."
-echo ""
-echo "Examples: my-openclaw, work-agent, home-assistant"
-echo ""
-ENV_DEFAULT="${DEPLOYMENT_NAME:-openclaw}"
-read -p "Name [$ENV_DEFAULT]: " DEPLOYMENT_NAME_INPUT
-DEPLOYMENT_NAME="${DEPLOYMENT_NAME_INPUT:-$ENV_DEFAULT}"
+if [ "$AUTO_MODE" = true ]; then
+    DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-openclaw}"
+else
+    echo "Give this deployment a name. Used for AWS resource tags"
+    echo "and to distinguish multiple deployments."
+    echo ""
+    echo "Examples: my-openclaw, work-agent, home-assistant"
+    echo ""
+    ENV_DEFAULT="${DEPLOYMENT_NAME:-openclaw}"
+    read -p "Name [$ENV_DEFAULT]: " DEPLOYMENT_NAME_INPUT
+    DEPLOYMENT_NAME="${DEPLOYMENT_NAME_INPUT:-$ENV_DEFAULT}"
+fi
 
 # Validate deployment name
 if ! echo "$DEPLOYMENT_NAME" | grep -qE '^[a-z][a-z0-9-]{0,23}$'; then
@@ -656,14 +768,18 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}STEP 5/$TOTAL_STEPS: Configure OpenClaw${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "How do you want to configure OpenClaw?"
-echo ""
-echo "  1) Quick setup — enter API key + channel token (recommended for first time)"
-echo "  2) Config files — point to existing openclaw config files"
-echo "  3) Skip — configure manually after deploy via SSM"
-echo ""
-read -p "Choose [1-3, default 1]: " CONFIG_CHOICE
-CONFIG_CHOICE="${CONFIG_CHOICE:-1}"
+if [ "$AUTO_MODE" = true ]; then
+    CONFIG_CHOICE="1"
+else
+    echo "How do you want to configure OpenClaw?"
+    echo ""
+    echo "  1) Quick setup — enter API key + channel token (recommended for first time)"
+    echo "  2) Config files — point to existing openclaw config files"
+    echo "  3) Skip — configure manually after deploy via SSM"
+    echo ""
+    read -p "Choose [1-3, default 1]: " CONFIG_CHOICE
+    CONFIG_CHOICE="${CONFIG_CHOICE:-1}"
+fi
 
 CONFIG_JSON=""
 ENV_CONTENT=""
