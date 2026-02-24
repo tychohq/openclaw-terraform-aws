@@ -4,9 +4,10 @@ data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
 
+  # Use the standard (non-minimal) AMI — minimal lacks SSM agent
   filter {
     name   = "name"
-    values = ["al2023-ami-*-arm64"]
+    values = ["al2023-ami-2023.*-kernel-*-arm64"]
   }
 
   filter {
