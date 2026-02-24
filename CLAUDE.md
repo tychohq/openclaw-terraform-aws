@@ -30,7 +30,14 @@
 - Never write secrets to files inside the repo directory
 - Test: `cd terraform && terraform init && terraform validate` must pass
 
-## Discord Bot Config
+## Channel Config
+### Slack (recommended for teams)
+- Socket Mode by default (no public URL needed)
+- Needs App Token (`xapp-...`) + Bot Token (`xoxb-...`)
+- Optional `SLACK_CHANNEL_ID` restricts to a single channel
+- See `docs/slack-bot-setup.md` for setup guide
+
+### Discord
 - Bot must NOT be public
 - All 3 privileged gateway intents enabled (Presence, Server Members, Message Content)
 - `groupPolicy: "allowlist"` — bot only responds in configured guilds

@@ -76,8 +76,14 @@ if [ "$AUTO_MODE" = true ]; then
     fi
 
     # Need at least one channel
+    HAS_SLACK=false
     HAS_DISCORD=false
     HAS_TELEGRAM=false
+
+    if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+        HAS_SLACK=true
+        [ -z "${SLACK_APP_TOKEN:-}" ] && MISSING+=("SLACK_APP_TOKEN   (required when SLACK_BOT_TOKEN is set — Socket Mode app token)")
+    fi
 
     if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
         HAS_DISCORD=true
@@ -90,8 +96,8 @@ if [ "$AUTO_MODE" = true ]; then
         [ -z "${TELEGRAM_OWNER_ID:-}" ] && MISSING+=("TELEGRAM_OWNER_ID (required when TELEGRAM_BOT_TOKEN is set)")
     fi
 
-    if [ "$HAS_DISCORD" = false ] && [ "$HAS_TELEGRAM" = false ]; then
-        MISSING+=("DISCORD_BOT_TOKEN or TELEGRAM_BOT_TOKEN  (at least one channel required)")
+    if [ "$HAS_SLACK" = false ] && [ "$HAS_DISCORD" = false ] && [ "$HAS_TELEGRAM" = false ]; then
+        MISSING+=("SLACK_BOT_TOKEN, DISCORD_BOT_TOKEN, or TELEGRAM_BOT_TOKEN  (at least one channel required)")
     fi
 
     # Validate deployment name format
@@ -796,6 +802,9 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         # Auto mode: use .env vars directly, no prompts
         ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
         OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+        SLACK_APP_TOKEN_VAL="${SLACK_APP_TOKEN:-}"
+        SLACK_BOT_TOKEN_VAL="${SLACK_BOT_TOKEN:-}"
+        SLACK_CHANNEL_ID="${SLACK_CHANNEL_ID:-}"
         DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
         DISCORD_GUILD_ID="${DISCORD_GUILD_ID:-}"
         DISCORD_CHANNEL_ID="${DISCORD_CHANNEL_ID:-}"
@@ -859,14 +868,18 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     echo ""
     echo "How will you talk to your OpenClaw?"
     echo ""
-    echo "  1) Discord bot"
-    echo "  2) Telegram bot"
-    echo "  3) Both"
+    echo "  1) Slack bot (recommended for teams)"
+    echo "  2) Discord bot"
+    echo "  3) Telegram bot"
+    echo "  4) Multiple (configure each)"
     echo ""
-    read -p "Choose [1-3, default 1]: " CHANNEL_CHOICE
+    read -p "Choose [1-4, default 1]: " CHANNEL_CHOICE
     CHANNEL_CHOICE="${CHANNEL_CHOICE:-1}"
 
     # Save .env defaults before clearing
+    _ENV_SLACK_APP_TOKEN="${SLACK_APP_TOKEN:-}"
+    _ENV_SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"
+    _ENV_SLACK_CHANNEL="${SLACK_CHANNEL_ID:-}"
     _ENV_DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
     _ENV_DISCORD_GUILD="${DISCORD_GUILD_ID:-}"
     _ENV_DISCORD_CHANNEL="${DISCORD_CHANNEL_ID:-}"
@@ -876,6 +889,9 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     _ENV_OWNER_NAME="${OWNER_NAME:-}"
     _ENV_TIMEZONE="${TIMEZONE:-America/New_York}"
 
+    SLACK_APP_TOKEN_VAL=""
+    SLACK_BOT_TOKEN_VAL=""
+    SLACK_CHANNEL_ID=""
     DISCORD_TOKEN=""
     DISCORD_GUILD_ID=""
     DISCORD_CHANNEL_ID=""
@@ -883,7 +899,72 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     TELEGRAM_TOKEN=""
     TELEGRAM_OWNER_ID=""
 
-    if [ "$CHANNEL_CHOICE" = "1" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
+    SETUP_SLACK=false
+    SETUP_DISCORD=false
+    SETUP_TELEGRAM=false
+
+    case $CHANNEL_CHOICE in
+        1) SETUP_SLACK=true ;;
+        2) SETUP_DISCORD=true ;;
+        3) SETUP_TELEGRAM=true ;;
+        4)
+            echo ""
+            echo "Select channels to configure (enter numbers separated by spaces):"
+            echo "  1) Slack  2) Discord  3) Telegram"
+            read -p "Channels [e.g. 1 2]: " MULTI_CHANNELS
+            for ch in $MULTI_CHANNELS; do
+                case $ch in
+                    1) SETUP_SLACK=true ;;
+                    2) SETUP_DISCORD=true ;;
+                    3) SETUP_TELEGRAM=true ;;
+                esac
+            done
+            ;;
+    esac
+
+    if [ "$SETUP_SLACK" = true ]; then
+        echo ""
+        echo -e "${BLUE}── Slack Setup ───────────────────────────────${NC}"
+        echo ""
+        echo "You need a Slack app with Socket Mode enabled."
+        echo "Create one at: https://api.slack.com/apps"
+        echo ""
+
+        if [ -n "$_ENV_SLACK_APP_TOKEN" ]; then
+            _MASKED="${_ENV_SLACK_APP_TOKEN:0:10}...${_ENV_SLACK_APP_TOKEN: -4}"
+            read -p "Slack App Token (xapp-...) [$_MASKED]: " _INPUT
+            SLACK_APP_TOKEN_VAL="${_INPUT:-$_ENV_SLACK_APP_TOKEN}"
+        else
+            read -p "Slack App Token (xapp-... from Socket Mode settings): " SLACK_APP_TOKEN_VAL
+        fi
+        if [ -z "$SLACK_APP_TOKEN_VAL" ]; then
+            echo -e "${RED}Error: Slack App Token is required${NC}"
+            exit 1
+        fi
+
+        if [ -n "$_ENV_SLACK_BOT_TOKEN" ]; then
+            _MASKED="${_ENV_SLACK_BOT_TOKEN:0:10}...${_ENV_SLACK_BOT_TOKEN: -4}"
+            read -p "Slack Bot Token (xoxb-...) [$_MASKED]: " _INPUT
+            SLACK_BOT_TOKEN_VAL="${_INPUT:-$_ENV_SLACK_BOT_TOKEN}"
+        else
+            read -p "Slack Bot Token (xoxb-... from OAuth & Permissions): " SLACK_BOT_TOKEN_VAL
+        fi
+        if [ -z "$SLACK_BOT_TOKEN_VAL" ]; then
+            echo -e "${RED}Error: Slack Bot Token is required${NC}"
+            exit 1
+        fi
+
+        if [ -n "$_ENV_SLACK_CHANNEL" ]; then
+            read -p "Restrict to channel ID [$_ENV_SLACK_CHANNEL] (blank=all channels): " _INPUT
+            SLACK_CHANNEL_ID="${_INPUT:-$_ENV_SLACK_CHANNEL}"
+        else
+            read -p "Restrict to channel ID (blank=all channels): " SLACK_CHANNEL_ID
+        fi
+    fi
+
+    if [ "$SETUP_DISCORD" = true ]; then
+        echo ""
+        echo -e "${BLUE}── Discord Setup ─────────────────────────────${NC}"
         echo ""
         if [ -n "$_ENV_DISCORD_TOKEN" ]; then
             _MASKED="${_ENV_DISCORD_TOKEN:0:10}...${_ENV_DISCORD_TOKEN: -4}"
@@ -927,7 +1008,9 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         fi
     fi
 
-    if [ "$CHANNEL_CHOICE" = "2" ] || [ "$CHANNEL_CHOICE" = "3" ]; then
+    if [ "$SETUP_TELEGRAM" = true ]; then
+        echo ""
+        echo -e "${BLUE}── Telegram Setup ────────────────────────────${NC}"
         echo ""
         if [ -n "$_ENV_TELEGRAM_TOKEN" ]; then
             _MASKED="${_ENV_TELEGRAM_TOKEN:0:10}...${_ENV_TELEGRAM_TOKEN: -4}"
@@ -979,6 +1062,26 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
           port: 18789
         }
       }')
+
+    # Add Slack channel if configured
+    if [ -n "$SLACK_BOT_TOKEN_VAL" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        --arg app_token "$SLACK_APP_TOKEN_VAL" \
+        --arg bot_token "$SLACK_BOT_TOKEN_VAL" \
+        '.channels.slack = {
+          enabled: true,
+          mode: "socket",
+          appToken: $app_token,
+          botToken: $bot_token
+        }')
+
+      # If a specific channel ID was provided, restrict to that channel
+      if [ -n "$SLACK_CHANNEL_ID" ]; then
+        CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+          --arg channel_id "$SLACK_CHANNEL_ID" \
+          '.channels.slack.channels[$channel_id] = { allow: true }')
+      fi
+    fi
 
     # Add Discord channel if configured
     if [ -n "$DISCORD_TOKEN" ]; then
@@ -1035,6 +1138,8 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     ENV_CONTENT=""
     [ -n "$ANTHROPIC_API_KEY" ] && ENV_CONTENT+="ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"$'\n'
     [ -n "$OPENAI_API_KEY" ] && ENV_CONTENT+="OPENAI_API_KEY=$OPENAI_API_KEY"$'\n'
+    [ -n "$SLACK_APP_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_APP_TOKEN=$SLACK_APP_TOKEN_VAL"$'\n'
+    [ -n "$SLACK_BOT_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN_VAL"$'\n'
     ENV_CONTENT+="GATEWAY_AUTH_TOKEN=$GATEWAY_TOKEN"$'\n'
 
     # Write secrets to temp files
