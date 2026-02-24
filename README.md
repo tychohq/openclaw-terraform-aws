@@ -54,6 +54,22 @@ aws configure
 - At least one chat channel token (Discord or Telegram)
 - At least one LLM provider API key (Anthropic or OpenAI)
 
+## Non-Interactive Deploy (`--auto`)
+
+If you fill out all required variables in `.env`, you can skip every prompt:
+
+```bash
+cp .env.example .env
+# Fill in all values (API key, bot token, guild ID, owner ID, etc.)
+vim .env
+
+./setup.sh --auto
+```
+
+Auto mode validates that all required fields are present before doing anything. If something's missing, it tells you exactly what and exits — no partial deploys.
+
+Great for CI, scripting, or re-deploys where your `.env` is already populated.
+
 ## Tear Down & Rebuild
 
 ```bash
@@ -62,6 +78,9 @@ aws configure
 
 # Re-deploy from scratch
 ./setup.sh
+
+# Or non-interactively
+./setup.sh --auto
 ```
 
 ---
