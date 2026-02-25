@@ -1,77 +1,89 @@
 #!/bin/bash
-# Check: OpenClaw Gateway service and health
+# Check: OpenClaw Gateway — uses openclaw health + status CLI
 
 check_gateway() {
     section "GATEWAY"
 
-    # ── Service / process check (OS-aware) ────────────────────────────────────
-
-    if $IS_LINUX; then
-        if safe_timeout 5 systemctl --user is-active openclaw-gateway &>/dev/null 2>&1; then
-            report_result "gateway.service" "pass" "openclaw-gateway systemd service is active"
-        else
-            report_result "gateway.service" "fail" "openclaw-gateway service is not active" \
-                "systemctl --user start openclaw-gateway"
-        fi
-
-    elif $IS_MACOS; then
-        local lc_out
-        lc_out=$(launchctl list ai.openclaw.gateway 2>/dev/null)
-        if echo "$lc_out" | grep -q '"PID"'; then
-            local pid
-            pid=$(echo "$lc_out" | grep '"PID"' | grep -oE '[0-9]+')
-            report_result "gateway.service" "pass" "openclaw-gateway launchctl service is running (pid $pid)"
-        else
-            local last_exit
-            last_exit=$(echo "$lc_out" | grep '"LastExitStatus"' | grep -oE '[0-9]+' || echo "unknown")
-            report_result "gateway.service" "fail" \
-                "openclaw-gateway not running (last exit: $last_exit)" \
-                "launchctl start ai.openclaw.gateway  # or: openclaw gateway start"
-        fi
-    else
-        # Fallback: look for the node/openclaw process by arguments
-        if pgrep -f 'openclaw/dist/index.*gateway' &>/dev/null 2>&1; then
-            report_result "gateway.service" "pass" "openclaw gateway process found"
-        else
-            report_result "gateway.service" "fail" "openclaw gateway process not found" \
-                "openclaw gateway start"
-        fi
+    if ! has_cmd openclaw; then
+        report_result "gateway.running" "fail" "openclaw CLI not found in PATH" \
+            "npm install -g openclaw  # or: bun add -g openclaw"
+        return
     fi
 
-    # ── HTTP health check ──────────────────────────────────────────────────────
-    # Try the configured port first, then fall back to common defaults
+    # ── Health check ───────────────────────────────────────────────────────────
+    # openclaw health works iff the gateway is reachable.
+    # Output: "Discord: ok (@Axel) (995ms)", "Telegram: ok (...)", session info, etc.
 
-    local configured_port
-    configured_port=$(get_gateway_port)
+    local health_output
+    health_output=$(safe_timeout 20 openclaw health 2>&1)
+    local health_exit=$?
 
-    local ports_to_try=()
-    [ -n "$configured_port" ] && ports_to_try+=("$configured_port")
-    ports_to_try+=(3033 3000 4433)
-
-    local health_port=""
-    for port in "${ports_to_try[@]}"; do
-        if safe_timeout 5 curl -sf "http://localhost:$port/health" &>/dev/null 2>&1; then
-            health_port=$port
-            break
-        fi
-    done
-
-    if [ -n "$health_port" ]; then
-        report_result "gateway.http" "pass" "Gateway responding on port $health_port"
-    else
-        report_result "gateway.http" "fail" \
-            "Gateway not responding on any port (tried: ${ports_to_try[*]})" \
-            "openclaw gateway start"
+    if [ $health_exit -ne 0 ] || [ -z "$health_output" ]; then
+        local start_cmd="openclaw gateway start"
+        $IS_LINUX && start_cmd="systemctl --user start openclaw-gateway"
+        report_result "gateway.running" "fail" \
+            "openclaw health failed — gateway not running" \
+            "$start_cmd"
+        return
     fi
 
-    # ── openclaw CLI version ───────────────────────────────────────────────────
+    report_result "gateway.running" "pass" "Gateway is running (openclaw health responded)"
 
-    if has_cmd openclaw; then
-        local version
-        version=$(safe_timeout 5 openclaw --version 2>/dev/null | head -1 || echo "unknown")
-        report_result "gateway.version" "pass" "openclaw: $version"
+    # Parse channel status lines: "Discord: ok (@Axel) (995ms)"
+    while IFS= read -r line; do
+        local channel status
+        channel=$(echo "$line" | cut -d: -f1 | tr '[:upper:]' '[:lower:]')
+        status=$(echo "$line" | awk '{print $2}')
+        if [ "$status" = "ok" ]; then
+            report_result "gateway.channel.$channel" "pass" "$line"
+        else
+            report_result "gateway.channel.$channel" "warn" "$line" \
+                "openclaw health  # diagnose channel"
+        fi
+    done < <(echo "$health_output" | \
+        grep -E '^[A-Za-z]+: (ok|warn|error|fail|connecting|disconnected|timeout)')
+
+    # Active session count
+    local sessions
+    sessions=$(echo "$health_output" | grep -oE '\([0-9]+ entries\)' | \
+        grep -oE '[0-9]+' | head -1)
+    [ -n "$sessions" ] && \
+        report_result "gateway.sessions" "pass" "Session store: $sessions active sessions"
+
+    # ── Status check ───────────────────────────────────────────────────────────
+    # openclaw status reports gateway reachability, version, and update status.
+
+    local status_output
+    status_output=$(safe_timeout 20 openclaw status 2>&1)
+
+    # Gateway reachability + app version (from the Gateway table row)
+    local reachable app_version
+    reachable=$(echo "$status_output" | grep -oE 'reachable [0-9]+ms' | head -1)
+    app_version=$(echo "$status_output" | \
+        grep -oE '\bapp [0-9]{4}\.[0-9]+\.[0-9]+\b' | head -1 | awk '{print $2}')
+
+    if [ -n "$reachable" ]; then
+        report_result "gateway.reachable" "pass" \
+            "Gateway ${reachable}${app_version:+ · v$app_version}"
     else
-        report_result "gateway.version" "fail" "openclaw not found in PATH" \
-            "npm install -g openclaw"
+        report_result "gateway.reachable" "warn" \
+            "Could not determine gateway reachability from status" \
+            "openclaw status  # check manually"
+    fi
+
+    # Update status: "npm latest YYYY.M.D" means on latest; anything else may need update
+    if echo "$status_output" | grep -q 'npm latest'; then
+        local update_ver
+        update_ver=$(echo "$status_output" | grep 'npm latest' | \
+            grep -oE '[0-9]{4}\.[0-9]+\.[0-9]+' | head -1)
+        report_result "gateway.update" "pass" \
+            "openclaw is up to date (v${update_ver:-unknown})"
+    elif echo "$status_output" | grep -q 'Update'; then
+        report_result "gateway.update" "warn" \
+            "openclaw may have an update available" \
+            "bun add -g openclaw@latest  # or: npm install -g openclaw@latest"
+    else
+        report_result "gateway.update" "skip" \
+            "Could not determine openclaw update status"
     fi
 }

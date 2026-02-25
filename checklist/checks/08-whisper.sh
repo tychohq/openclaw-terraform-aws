@@ -4,38 +4,41 @@
 check_whisper() {
     section "VOICE TRANSCRIPTION (Whisper)"
 
-    # Look for whisper skill — check npm global, bun global, and user dirs
-    local skill_found=false
-    local skill_name_found=""
-    local skill_path_found=""
+    # ── Skill readiness via openclaw skills check ──────────────────────────────
+    # Skills in "Ready to use" have no parenthetical; missing ones show (bins: X) etc.
 
-    local npm_root=""
-    npm_root=$($NPM_CMD root -g 2>/dev/null || echo "")
+    if has_cmd openclaw; then
+        local skills_output skill_line skill_name_found=""
+        skills_output=$(safe_timeout 30 openclaw skills check 2>&1)
 
-    for skill_dir in \
-        "$npm_root/openclaw/skills" \
-        "$HOME/.bun/install/global/node_modules/openclaw/skills" \
-        "$HOME/.openclaw/skills" \
-        "$HOME/.agents/skills" \
-        "$HOME/.openclaw/workspace/skills"; do
-        for skill_name in openai-whisper-api whisper openai-whisper; do
-            if [ -d "$skill_dir/$skill_name" ]; then
-                skill_found=true
+        # Try each known whisper skill name in order of preference
+        for skill_name in openai-whisper-api openai-whisper whisper; do
+            skill_line=$(echo "$skills_output" | grep "$skill_name")
+            if [ -n "$skill_line" ]; then
                 skill_name_found="$skill_name"
-                skill_path_found="$skill_dir/$skill_name"
-                break 2
+                break
             fi
         done
-    done
 
-    if $skill_found; then
-        report_result "whisper.skill" "pass" "Whisper skill found: $skill_name_found ($skill_path_found)"
+        if [ -z "$skill_name_found" ]; then
+            report_result "whisper.skill" "fail" \
+                "Whisper skill not found in openclaw skills check" \
+                "clawhub install openai-whisper-api"
+        elif echo "$skill_line" | grep -qE '\(bins:|\(env:|\(config:'; then
+            local requirement
+            requirement=$(echo "$skill_line" | grep -oE '\(.*\)')
+            report_result "whisper.skill" "fail" \
+                "$skill_name_found has unmet requirements: $requirement" \
+                "clawhub install openai-whisper-api  # or install required binaries/env vars"
+        else
+            report_result "whisper.skill" "pass" "Whisper skill ready to use ($skill_name_found)"
+        fi
     else
-        report_result "whisper.skill" "fail" "Whisper skill not found" \
-            "clawhub install openai-whisper-api"
+        report_result "whisper.skill" "skip" \
+            "openclaw CLI not found — cannot check skill status"
     fi
 
-    # OPENAI_API_KEY (env or .env file)
+    # ── OPENAI_API_KEY (env or .env file) ─────────────────────────────────────
     local env_file="$HOME/.openclaw/.env"
     local key_set=false
 

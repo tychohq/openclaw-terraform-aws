@@ -1,64 +1,85 @@
 #!/bin/bash
-# Check: Workspace structure, MEMORY.md, git repo, embeddings
+# Check: Memory search via openclaw memory status
 
 check_memory() {
     section "MEMORY & WORKSPACE"
 
-    local workspace="$HOME/.openclaw/workspace"
-    local openclaw_dir="$HOME/.openclaw"
-
-    # Workspace directory structure
-    local dirs_ok=true
-    for dir in memory docs tools; do
-        if [ ! -d "$workspace/$dir" ]; then
-            dirs_ok=false
-            break
-        fi
-    done
-
-    if $dirs_ok; then
-        report_result "memory.dirs" "pass" "Workspace directories exist (memory, docs, tools)"
-    else
-        report_result "memory.dirs" "fail" "Workspace directories incomplete" \
-            "mkdir -p ~/.openclaw/workspace/{memory,docs,tools}"
+    if ! has_cmd openclaw; then
+        report_result "memory.status" "fail" "openclaw CLI not found" \
+            "Install openclaw to check memory status"
+        return
     fi
 
-    # MEMORY.md exists (check both common locations)
-    if [ -f "$workspace/memory/MEMORY.md" ] || [ -f "$workspace/MEMORY.md" ]; then
-        report_result "memory.file" "pass" "MEMORY.md exists"
-    else
-        report_result "memory.file" "warn" "MEMORY.md not found" \
-            "touch ~/.openclaw/workspace/memory/MEMORY.md"
+    local memory_output
+    memory_output=$(safe_timeout 15 openclaw memory status 2>&1)
+
+    if [ -z "$memory_output" ]; then
+        report_result "memory.status" "fail" \
+            "openclaw memory status returned no output" \
+            "openclaw memory status  # check manually"
+        return
     fi
 
-    # .openclaw is a git repo
-    if [ -d "$openclaw_dir/.git" ]; then
-        local commit_count
-        commit_count=$(git -C "$openclaw_dir" rev-list --count HEAD 2>/dev/null || echo "0")
-        report_result "memory.git" "pass" ".openclaw is a git repo ($commit_count commits)"
+    # Provider and model (informational)
+    local provider model
+    provider=$(echo "$memory_output" | awk '/^Provider:/{print $2}')
+    model=$(echo "$memory_output" | awk '/^Model:/{print $2}')
+    report_result "memory.provider" "pass" "Memory provider: ${provider:-unknown} (${model:-unknown})"
+
+    # Indexed files and chunks: "Indexed: 300/1663 files · 2760 chunks"
+    local indexed_line indexed_files total_files chunks
+    indexed_line=$(echo "$memory_output" | grep '^Indexed:')
+    indexed_files=$(echo "$indexed_line" | grep -oE '[0-9]+/' | head -1 | tr -d '/')
+    total_files=$(echo "$indexed_line" | grep -oE '/[0-9]+' | head -1 | tr -d '/')
+    chunks=$(echo "$indexed_line" | grep -oE '[0-9]+ chunks' | awk '{print $1}')
+
+    if [ -n "$indexed_files" ]; then
+        report_result "memory.indexed" "pass" \
+            "Indexed: ${indexed_files}/${total_files:-?} files · ${chunks:-?} chunks"
     else
-        report_result "memory.git" "warn" ".openclaw is not a git repository" \
-            "cd ~/.openclaw && git init && git add -A && git commit -m 'Initial workspace'"
+        report_result "memory.indexed" "warn" \
+            "Could not parse indexed file count" \
+            "openclaw memory status  # check manually"
     fi
 
-    # Embedding index (optional — built on first use)
-    local embeddings_found=false
-    local embed_path_found=""
-    for embed_path in \
-        "$workspace/.embeddings" \
-        "$workspace/embeddings" \
-        "$openclaw_dir/.embeddings" \
-        "$workspace/memory/.embeddings"; do
-        if [ -d "$embed_path" ]; then
-            embeddings_found=true
-            embed_path_found="$embed_path"
-            break
-        fi
-    done
-
-    if $embeddings_found; then
-        report_result "memory.embeddings" "pass" "Embedding index found at $embed_path_found"
+    # Dirty flag: warn if index needs reindexing
+    local dirty
+    dirty=$(echo "$memory_output" | awk '/^Dirty:/{print $2}')
+    if [ "$dirty" = "yes" ]; then
+        report_result "memory.dirty" "warn" "Memory index is dirty — needs reindex" \
+            "openclaw memory reindex"
     else
-        report_result "memory.embeddings" "skip" "No embedding index (built automatically on first use)"
+        report_result "memory.dirty" "pass" "Memory index is clean"
     fi
+
+    # Vector search readiness
+    if echo "$memory_output" | grep -q '^Vector: ready'; then
+        local dims
+        dims=$(echo "$memory_output" | awk '/^Vector dims:/{print $3}')
+        report_result "memory.vector" "pass" \
+            "Vector search: ready${dims:+ (dims: $dims)}"
+    else
+        local vector_line
+        vector_line=$(echo "$memory_output" | grep '^Vector:')
+        report_result "memory.vector" "warn" \
+            "Vector search not ready: ${vector_line:-no output}" \
+            "openclaw memory reindex  # or check embedding provider config"
+    fi
+
+    # Full-text search readiness
+    if echo "$memory_output" | grep -q '^FTS: ready'; then
+        report_result "memory.fts" "pass" "Full-text search: ready"
+    else
+        local fts_line
+        fts_line=$(echo "$memory_output" | grep '^FTS:')
+        report_result "memory.fts" "warn" \
+            "Full-text search not ready: ${fts_line:-no output}"
+    fi
+
+    # Embedding cache (informational)
+    local cache_entries
+    cache_entries=$(echo "$memory_output" | \
+        grep '^Embedding cache:' | grep -oE '[0-9]+ entries' | awk '{print $1}')
+    [ -n "$cache_entries" ] && \
+        report_result "memory.cache" "pass" "Embedding cache: $cache_entries entries"
 }

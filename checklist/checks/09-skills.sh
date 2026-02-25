@@ -1,76 +1,58 @@
 #!/bin/bash
-# Check: Skill inventory across all skill directories
+# Check: Skill inventory via openclaw skills check
 
 check_skills() {
     section "SKILLS"
 
-    local total_skills=0
-    local broken_skills=0
-
-    # Find bundled skills — check npm global then bun global (bun takes precedence)
-    local bundled_dir=""
-    local npm_root
-    npm_root=$($NPM_CMD root -g 2>/dev/null || echo "")
-    [ -d "$npm_root/openclaw/skills" ] && bundled_dir="$npm_root/openclaw/skills"
-    local bun_skills="$HOME/.bun/install/global/node_modules/openclaw/skills"
-    [ -d "$bun_skills" ] && bundled_dir="$bun_skills"
-
-    # Build list of skill directories with labels
-    local skill_dirs=()
-    [ -n "$bundled_dir" ] && skill_dirs+=("$bundled_dir:bundled")
-    [ -d "$HOME/.openclaw/skills" ] && \
-        skill_dirs+=("$HOME/.openclaw/skills:clawhub")
-    [ -d "$HOME/.agents/skills" ] && \
-        skill_dirs+=("$HOME/.agents/skills:personal")
-    [ -d "$HOME/.openclaw/workspace/skills" ] && \
-        skill_dirs+=("$HOME/.openclaw/workspace/skills:workspace")
-
-    if [ "${#skill_dirs[@]}" -eq 0 ]; then
-        report_result "skills.dirs" "warn" "No skill directories found" \
-            "Install skills with: clawhub install <skill-name>"
+    if ! has_cmd openclaw; then
+        report_result "skills.status" "fail" "openclaw CLI not found" \
+            "Install openclaw to check skills"
         return
     fi
 
-    for dir_entry in "${skill_dirs[@]}"; do
-        local dir="${dir_entry%%:*}"
-        local label="${dir_entry##*:}"
-        local count=0
-        local broken=0
-        local names=()
+    local skills_output
+    skills_output=$(safe_timeout 30 openclaw skills check 2>&1)
 
-        while IFS= read -r -d '' skill_dir; do
-            local skill_name
-            skill_name=$(basename "$skill_dir")
-            count=$((count + 1))
-            names+=("$skill_name")
+    if [ -z "$skills_output" ]; then
+        report_result "skills.status" "fail" \
+            "openclaw skills check returned no output"
+        return
+    fi
 
-            if [ ! -f "$skill_dir/SKILL.md" ]; then
-                broken=$((broken + 1))
-                report_result "skills.broken.$skill_name" "warn" \
-                    "Skill '$skill_name' ($label) is missing SKILL.md" \
-                    "Fix or remove: $skill_dir"
-            fi
-        done < <(find "$dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+    # Parse summary counts from the header block:
+    #   Total: 97
+    #   ✓ Eligible: 68
+    #   ⏸ Disabled: 0
+    #   🚫 Blocked by allowlist: 0
+    #   ✗ Missing requirements: 29
+    local total eligible disabled missing blocked
+    total=$(echo "$skills_output" | awk '/Total:/{print $NF}' | head -1)
+    eligible=$(echo "$skills_output" | awk '/Eligible:/{print $NF}' | head -1)
+    disabled=$(echo "$skills_output" | awk '/Disabled:/{print $NF}' | head -1)
+    # Missing requirements appears both as a count line ("✗ Missing requirements: 29")
+    # and as a section header ("Missing requirements:"). Match only lines ending in digits.
+    missing=$(echo "$skills_output" | awk '/Missing requirements: [0-9]/{print $NF}' | head -1)
+    blocked=$(echo "$skills_output" | awk '/Blocked by allowlist:/{print $NF}' | head -1)
 
-        total_skills=$((total_skills + count))
-        broken_skills=$((broken_skills + broken))
+    if [ -z "$total" ]; then
+        report_result "skills.status" "warn" \
+            "Could not parse skill counts from openclaw skills check" \
+            "openclaw skills check  # check manually"
+        return
+    fi
 
-        if [ "$count" -gt 0 ]; then
-            report_result "skills.$label" "pass" "$label ($count): ${names[*]}"
-        else
-            report_result "skills.$label" "skip" "No $label skills installed"
-        fi
-    done
+    report_result "skills.summary" "pass" \
+        "Skills: $total total · $eligible eligible · ${missing:-0} missing requirements"
 
-    # Overall summary
-    if [ "$total_skills" -eq 0 ]; then
-        report_result "skills.total" "warn" "No skills installed in any directory" \
-            "Browse available skills: clawhub search"
-    elif [ "$broken_skills" -eq 0 ]; then
-        report_result "skills.total" "pass" "Total: $total_skills skills, all have SKILL.md"
-    else
-        report_result "skills.total" "warn" \
-            "Total: $total_skills skills, $broken_skills missing SKILL.md" \
-            "Review and fix broken skills listed above"
+    [ "${disabled:-0}" -gt 0 ] && \
+        report_result "skills.disabled" "skip" "$disabled skills disabled"
+
+    [ "${blocked:-0}" -gt 0 ] && \
+        report_result "skills.blocked" "skip" "$blocked skills blocked by allowlist"
+
+    if [ "${missing:-0}" -gt 0 ]; then
+        report_result "skills.missing" "skip" \
+            "$missing skills have unmet requirements (bins/env/config)" \
+            "openclaw skills check  # see full list of missing requirements"
     fi
 }

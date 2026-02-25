@@ -4,34 +4,33 @@
 check_image_gen() {
     section "IMAGE GENERATION (Nano Banana Pro)"
 
-    # Look for nano-banana-pro skill — check npm global, bun global, and user dirs
-    local skill_found=false
-    local skill_path_found=""
+    # ── Skill readiness via openclaw skills check ──────────────────────────────
+    # Skills in "Ready to use" have no parenthetical; missing ones show (bins: X) etc.
 
-    local npm_root=""
-    npm_root=$($NPM_CMD root -g 2>/dev/null || echo "")
+    if has_cmd openclaw; then
+        local skills_output skill_line
+        skills_output=$(safe_timeout 30 openclaw skills check 2>&1)
+        skill_line=$(echo "$skills_output" | grep 'nano-banana-pro')
 
-    for skill_dir in \
-        "$npm_root/openclaw/skills" \
-        "$HOME/.bun/install/global/node_modules/openclaw/skills" \
-        "$HOME/.openclaw/skills" \
-        "$HOME/.agents/skills" \
-        "$HOME/.openclaw/workspace/skills"; do
-        if [ -d "$skill_dir/nano-banana-pro" ]; then
-            skill_found=true
-            skill_path_found="$skill_dir/nano-banana-pro"
-            break
+        if [ -z "$skill_line" ]; then
+            report_result "image_gen.skill" "fail" \
+                "nano-banana-pro skill not found" \
+                "clawhub install nano-banana-pro"
+        elif echo "$skill_line" | grep -qE '\(bins:|\(env:|\(config:'; then
+            local requirement
+            requirement=$(echo "$skill_line" | grep -oE '\(.*\)')
+            report_result "image_gen.skill" "fail" \
+                "nano-banana-pro has unmet requirements: $requirement" \
+                "clawhub install nano-banana-pro  # or install required binaries/env vars"
+        else
+            report_result "image_gen.skill" "pass" "nano-banana-pro skill: ready to use"
         fi
-    done
-
-    if $skill_found; then
-        report_result "image_gen.skill" "pass" "nano-banana-pro skill found ($skill_path_found)"
     else
-        report_result "image_gen.skill" "fail" "nano-banana-pro skill not found" \
-            "clawhub install nano-banana-pro"
+        report_result "image_gen.skill" "skip" \
+            "openclaw CLI not found — cannot check skill status"
     fi
 
-    # Check Gemini API key (env or .env file)
+    # ── Gemini API key (env or .env file) ─────────────────────────────────────
     local env_file="$HOME/.openclaw/.env"
     local key_set=false
 
@@ -50,7 +49,8 @@ check_image_gen() {
     if $key_set; then
         report_result "image_gen.api_key" "pass" "Gemini API key is set"
     else
-        report_result "image_gen.api_key" "fail" "Gemini API key not set (GEMINI_API_KEY or GOOGLE_AI_API_KEY)" \
+        report_result "image_gen.api_key" "fail" \
+            "Gemini API key not set (GEMINI_API_KEY or GOOGLE_AI_API_KEY)" \
             "Add GEMINI_API_KEY=... to ~/.openclaw/.env"
     fi
 }
