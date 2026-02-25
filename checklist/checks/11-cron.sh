@@ -163,6 +163,13 @@ check_cron() {
         last=$(echo "$row"   | cut -c${last_col}-$((status_col - 1)) | xargs)
         status=$(echo "$row" | cut -c${status_col}-               | awk '{print $1}')
 
+        # If the table already truncated the name (ends with "..."), strip the
+        # partial word fragment before the dots, then re-apply clean truncation.
+        if echo "$name" | grep -qE '\.\.\.$'; then
+            name=$(echo "$name" | sed 's/\.\.\.\s*$//' | rev | cut -d' ' -f2- | rev | xargs)
+            name="${name}..."
+        fi
+
         local display_name
         display_name=$(_truncate_name "$name" 28)
 
