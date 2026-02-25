@@ -88,10 +88,14 @@ section() {
 
 # Check if a config key is enabled
 # Usage: is_enabled "gateway"
-# Reads from CHECKLIST_CONF associative array (set by runner)
+# Reads config via conf_get() (set by runner)
 is_enabled() {
-    local key="CHECK_${1^^}"
-    [ "${CHECKLIST_CONF[$key]:-false}" = "true" ]
+    local upper
+    upper=$(echo "$1" | tr '[:lower:]' '[:upper:]')
+    local key="CHECK_${upper}"
+    local val
+    val=$(conf_get "$key" 2>/dev/null)
+    [ "${val:-false}" = "true" ]
 }
 
 # Check if a command exists

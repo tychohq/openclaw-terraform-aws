@@ -59,19 +59,24 @@ fi
 
 # ── Load Config ───────────────────────────────────────────────────────────────
 
-declare -A CHECKLIST_CONF
+# Config is read from file via conf_get() — no associative arrays (bash 3 compat)
+CHECKLIST_CONF_FILE=""
+
+# Read a config value by key. Returns the value or empty string.
+# Usage: conf_get "CHECK_GATEWAY"  →  "true"
+conf_get() {
+    local key="$1"
+    if [ -n "$CHECKLIST_CONF_FILE" ] && [ -f "$CHECKLIST_CONF_FILE" ]; then
+        grep -E "^[[:space:]]*${key}=" "$CHECKLIST_CONF_FILE" 2>/dev/null | \
+            tail -1 | sed 's/^[^=]*=//' | tr -d '[:space:]'
+    fi
+}
 
 if [ -n "$CONF_PATH" ] && [ -f "$CONF_PATH" ]; then
-    while IFS='=' read -r key value; do
-        # Skip comments and empty lines
-        [[ "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "${key// /}" ]] && continue
-        key="${key// /}"
-        value="${value//[[:space:]]/}"
-        CHECKLIST_CONF["$key"]="$value"
-    done < "$CONF_PATH"
+    CHECKLIST_CONF_FILE="$CONF_PATH"
     # Apply config overrides that affect lib.sh globals
-    NPM_CMD="${CHECKLIST_CONF[NPM_CMD]:-npm}"
+    local_npm_cmd=$(conf_get "NPM_CMD")
+    NPM_CMD="${local_npm_cmd:-npm}"
 elif [ -z "$SINGLE_CHECK" ]; then
     if [ "$CHECKLIST_JSON" != "true" ]; then
         echo ""
@@ -148,7 +153,8 @@ else
         # Build config key: hyphen → underscore, then uppercase
         config_key="CHECK_$(echo "${check_id}" | tr '[:lower:]-' '[:upper:]_')"
 
-        if [ "${CHECKLIST_CONF[$config_key]:-false}" != "true" ]; then
+        config_val=$(conf_get "$config_key")
+        if [ "${config_val:-false}" != "true" ]; then
             continue
         fi
 

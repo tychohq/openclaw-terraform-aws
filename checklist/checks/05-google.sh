@@ -47,7 +47,7 @@ _gog_test_service() {
         report_result "$result_id" "pass" "$label: $access (tested)"
     else
         report_result "$result_id" "warn" "$label: API call failed" \
-            "gog auth add $account --services ${label,,}  # re-authorize"
+            "gog auth add $account --services $(echo "$label" | tr '[:upper:]' '[:lower:]')  # re-authorize"
     fi
 }
 
@@ -70,7 +70,8 @@ check_google() {
         return
     fi
 
-    local conf_account="${CHECKLIST_CONF[GOOGLE_ACCOUNT]:-}"
+    local conf_account
+    conf_account=$(conf_get "GOOGLE_ACCOUNT")
 
     # ── Try gog auth list --json ───────────────────────────────────────────────
     # Works when the Keychain is accessible (interactive terminal).
