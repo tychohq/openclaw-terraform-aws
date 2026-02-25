@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check: Cron scheduler — per-job display with humanized schedules
+# Check: Cron scheduler — aligned table display with humanized schedules
 
 # Convert a raw truncated schedule string to human-readable text.
 # Input: "cron 0 */6 * * * @ America/Ne..." or "at 2026-03-11 15:00Z"
@@ -70,18 +70,27 @@ _humanize_cron_schedule() {
     echo "$sched"
 }
 
-# Extract just the cron/at expression, stripping "cron " prefix and timezone.
-_extract_cron_raw() {
-    local sched="$1"
-    if echo "$sched" | grep -qE '^cron '; then
-        echo "$sched" | sed 's/^cron //; s/ @ .*//'
+# Truncate a name to maxlen chars at a word boundary; append "..." if truncated.
+_truncate_name() {
+    local name="$1" maxlen="$2"
+    if [ "${#name}" -le "$maxlen" ]; then
+        echo "$name"
         return
     fi
-    if echo "$sched" | grep -qE '^at '; then
-        echo "$sched" | sed 's/^at //'
-        return
-    fi
-    echo "$sched"
+    # Find last space at or before (maxlen-3) to avoid cutting mid-word
+    local trunc
+    trunc=$(echo "$name" | awk -v max="$((maxlen - 3))" '{
+        result = ""
+        n = split($0, words, " ")
+        for (i = 1; i <= n; i++) {
+            test = (result ? result " " : "") words[i]
+            if (length(test) > max) break
+            result = test
+        }
+        if (result == "") result = substr($0, 1, max)
+        print result "..."
+    }')
+    echo "$trunc"
 }
 
 check_cron() {
@@ -141,17 +150,24 @@ check_cron() {
     last_col=$((last_col   + 1))
     status_col=$((status_col + 1))
 
-    local ok_count=0 broken_count=0
+    # ── First pass: collect job data and find max name length ─────────────────
+    local -a job_keys job_names job_scheds job_lasts job_levels
+    local max_name=0 ok_count=0 broken_count=0
 
     while IFS= read -r row; do
         [ -z "$row" ] && continue
 
-        # Extract fields by fixed column positions
         local name sched last status
         name=$(echo "$row"   | cut -c${name_col}-$((sched_col  - 1)) | xargs)
         sched=$(echo "$row"  | cut -c${sched_col}-$((next_col  - 1)) | xargs)
         last=$(echo "$row"   | cut -c${last_col}-$((status_col - 1)) | xargs)
         status=$(echo "$row" | cut -c${status_col}-               | awk '{print $1}')
+
+        local display_name
+        display_name=$(_truncate_name "$name" 28)
+
+        local dlen=${#display_name}
+        [ "$dlen" -gt "$max_name" ] && max_name="$dlen"
 
         local human_sched
         human_sched=$(_humanize_cron_schedule "$sched")
@@ -165,19 +181,34 @@ check_cron() {
 
         local status_level
         case "$status" in
-            ok)   status_level="pass";  ok_count=$((ok_count + 1)) ;;
+            ok)   status_level="pass"; ok_count=$((ok_count + 1)) ;;
             idle) status_level="skip" ;;
-            *)    status_level="warn";  broken_count=$((broken_count + 1)) ;;
+            *)    status_level="warn"; broken_count=$((broken_count + 1)) ;;
         esac
 
-        # Safe key: replace non-alphanumeric runs with underscore
         local safe_name
         safe_name=$(echo "$name" | tr -cs 'a-zA-Z0-9' '_' | sed 's/_*$//')
 
-        report_result "cron.job.$safe_name" "$status_level" \
-            "$name — $human_sched — $last_str"
+        job_keys+=("cron.job.$safe_name")
+        job_names+=("$display_name")
+        job_scheds+=("$human_sched")
+        job_lasts+=("$last_str")
+        job_levels+=("$status_level")
 
     done <<< "$data_rows"
+
+    # ── Second pass: report with aligned columns ──────────────────────────────
+    info_msg ""
+    local idx
+    for idx in "${!job_keys[@]}"; do
+        local msg
+        msg=$(printf "%-*s  %-12s  %s" \
+            "$max_name" "${job_names[$idx]}" \
+            "${job_scheds[$idx]}" \
+            "${job_lasts[$idx]}")
+        report_result "${job_keys[$idx]}" "${job_levels[$idx]}" "$msg"
+    done
+    info_msg ""
 
     if [ "$broken_count" -gt 0 ]; then
         report_result "cron.summary" "warn" \

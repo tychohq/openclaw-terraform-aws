@@ -13,11 +13,21 @@ _gog_label() {
     esac
 }
 
+# Keyword (ERE) to grep from account-level OAuth scope URLs for each service.
+_gog_scope_keyword() {
+    case "$1" in
+        docs)      echo "documents"          ;;
+        sheets)    echo "spreadsheets"       ;;
+        people)    echo "contacts|directory" ;;
+        *)         echo "$1"                 ;;
+    esac
+}
+
 # Determine read/write level from newline-separated OAuth scope URLs.
-# Any non-readonly scope → read+write; all readonly → read-only; empty → authorized
+# Any non-readonly scope → read+write; all readonly → read-only; empty → read+write (assumed)
 _gog_access() {
     local scopes="$1"
-    [ -z "$scopes" ] && echo "authorized" && return
+    [ -z "$scopes" ] && echo "read+write" && return
     while IFS= read -r s; do
         [ -z "$s" ] && continue
         if ! echo "$s" | grep -q '\.readonly'; then
@@ -34,7 +44,7 @@ _gog_test_service() {
     local result_id="$1" label="$2" account="$3" access="$4"
     shift 4
     if safe_timeout 10 "$@" &>/dev/null 2>&1; then
-        report_result "$result_id" "pass" "$label: accessible ($access)"
+        report_result "$result_id" "pass" "$label: $access (tested)"
     else
         report_result "$result_id" "warn" "$label: API call failed" \
             "gog auth add $account --services ${label,,}  # re-authorize"
@@ -79,11 +89,15 @@ check_google() {
 
         local i=0
         while [ "$i" -lt "$account_count" ]; do
-            local email authorized_at svc_count svc_type services_raw
+            local email authorized_at svc_count svc_type services_raw account_scopes
             email=$(echo "$auth_list_json" | jq -r --argjson n "$i" '.accounts[$n].email // empty')
 
             authorized_at=$(echo "$auth_list_json" | jq -r --argjson n "$i" \
                 '.accounts[$n] | .authorizedAt // .createdAt // empty' 2>/dev/null | cut -c1-10)
+
+            # Account-level OAuth scopes (used for all services)
+            account_scopes=$(echo "$auth_list_json" | jq -r --argjson n "$i" \
+                '.accounts[$n].scopes // [] | .[]' 2>/dev/null)
 
             # Services — handle both string arrays and object arrays
             svc_type=$(echo "$auth_list_json" | jq -r --argjson n "$i" \
@@ -115,18 +129,12 @@ check_google() {
 
             while IFS= read -r svc; do
                 [ -z "$svc" ] && continue
-                local label access scopes_raw
+                local label scope_kw scopes_raw access
                 label=$(_gog_label "$svc")
 
-                # Get scopes for this service (only available in object-array format)
-                if [ "$svc_type" = "objects" ]; then
-                    scopes_raw=$(echo "$auth_list_json" | jq -r \
-                        --argjson n "$i" --arg s "$svc" \
-                        '.accounts[$n].services |
-                         map(select(.name == $s)) | .[0].scopes // [] | .[]' 2>/dev/null)
-                else
-                    scopes_raw=""
-                fi
+                # Grep account-level scopes for this service's keyword
+                scope_kw=$(_gog_scope_keyword "$svc")
+                scopes_raw=$(echo "$account_scopes" | grep -iE "$scope_kw" 2>/dev/null)
                 access=$(_gog_access "$scopes_raw")
 
                 local rid="google.${safe_email}.$svc"
@@ -144,7 +152,6 @@ check_google() {
                             gog drive ls \
                             --json --no-input --max 1 --account "$email" ;;
                     *)
-                        # Non-testable services: just report authorization status
                         report_result "$rid" "pass" "$label: $access" ;;
                 esac
             done <<< "$services_raw"
