@@ -21,27 +21,27 @@ check_discord() {
         return
     fi
 
-    # Discord section present in config
+    # Discord section at .channels.discord (not top-level .discord)
     local discord_section
-    discord_section=$(jq -r '.discord // empty' "$config_file" 2>/dev/null)
+    discord_section=$(jq -r '.channels.discord // empty' "$config_file" 2>/dev/null)
 
     if [ -z "$discord_section" ] || [ "$discord_section" = "null" ]; then
-        report_result "discord.config" "fail" "No discord section in openclaw.json" \
-            "Add discord config to ~/.openclaw/openclaw.json"
+        report_result "discord.config" "fail" "No .channels.discord section in openclaw.json" \
+            "Add discord config under .channels.discord in ~/.openclaw/openclaw.json"
         return
     fi
 
-    report_result "discord.config" "pass" "Discord section present in config"
+    report_result "discord.config" "pass" "Discord config found at .channels.discord"
 
     # Bot token set (don't print it)
     local token
-    token=$(jq -r '.discord.token // empty' "$config_file" 2>/dev/null)
+    token=$(jq -r '.channels.discord.token // empty' "$config_file" 2>/dev/null)
 
     if [ -n "$token" ] && [ "$token" != "null" ]; then
         report_result "discord.token" "pass" "Discord bot token is set"
     else
         report_result "discord.token" "fail" "Discord bot token not set" \
-            "Set discord.token in ~/.openclaw/openclaw.json"
+            "Set .channels.discord.token in ~/.openclaw/openclaw.json"
     fi
 
     # ── Recent connection in gateway logs (OS-aware) ──────────────────────────

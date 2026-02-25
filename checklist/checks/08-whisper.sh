@@ -4,20 +4,21 @@
 check_whisper() {
     section "VOICE TRANSCRIPTION (Whisper)"
 
-    # Look for whisper skill in all skill directories
+    # Look for whisper skill — check npm global, bun global, and user dirs
     local skill_found=false
     local skill_name_found=""
     local skill_path_found=""
 
     local npm_root=""
-    npm_root=$(npm root -g 2>/dev/null || echo "")
+    npm_root=$($NPM_CMD root -g 2>/dev/null || echo "")
 
     for skill_dir in \
         "$npm_root/openclaw/skills" \
+        "$HOME/.bun/install/global/node_modules/openclaw/skills" \
         "$HOME/.openclaw/skills" \
         "$HOME/.agents/skills" \
         "$HOME/.openclaw/workspace/skills"; do
-        for skill_name in openai-whisper-api whisper; do
+        for skill_name in openai-whisper-api whisper openai-whisper; do
             if [ -d "$skill_dir/$skill_name" ]; then
                 skill_found=true
                 skill_name_found="$skill_name"

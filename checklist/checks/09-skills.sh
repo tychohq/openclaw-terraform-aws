@@ -7,13 +7,17 @@ check_skills() {
     local total_skills=0
     local broken_skills=0
 
-    local npm_root=""
-    npm_root=$(npm root -g 2>/dev/null || echo "")
+    # Find bundled skills — check npm global then bun global (bun takes precedence)
+    local bundled_dir=""
+    local npm_root
+    npm_root=$($NPM_CMD root -g 2>/dev/null || echo "")
+    [ -d "$npm_root/openclaw/skills" ] && bundled_dir="$npm_root/openclaw/skills"
+    local bun_skills="$HOME/.bun/install/global/node_modules/openclaw/skills"
+    [ -d "$bun_skills" ] && bundled_dir="$bun_skills"
 
     # Build list of skill directories with labels
     local skill_dirs=()
-    [ -n "$npm_root" ] && [ -d "$npm_root/openclaw/skills" ] && \
-        skill_dirs+=("$npm_root/openclaw/skills:bundled")
+    [ -n "$bundled_dir" ] && skill_dirs+=("$bundled_dir:bundled")
     [ -d "$HOME/.openclaw/skills" ] && \
         skill_dirs+=("$HOME/.openclaw/skills:clawhub")
     [ -d "$HOME/.agents/skills" ] && \

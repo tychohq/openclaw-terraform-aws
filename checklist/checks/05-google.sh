@@ -7,7 +7,7 @@ check_google() {
     # gog installed?
     if ! has_cmd gog; then
         report_result "google.installed" "skip" "gog CLI not installed (optional)" \
-            "npm install -g gogcli  # or: see github.com/steipete/gogcli"
+            "brew install gogcli  # or: see github.com/steipete/gogcli"
         return
     fi
 
@@ -15,28 +15,27 @@ check_google() {
     gog_ver=$(gog --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
     report_result "google.installed" "pass" "gog CLI installed (v$gog_ver)"
 
-    # Auth status — check config_exists + accounts
-    local auth_out
-    auth_out=$(safe_timeout 10 gog auth status 2>/dev/null || echo "")
-
-    if echo "$auth_out" | grep -qi 'config_exists.*true\|authenticated\|accounts'; then
-        report_result "google.auth" "pass" "gog authenticated (config found)"
-    elif [ -z "$auth_out" ]; then
-        report_result "google.auth" "fail" "gog auth status returned no output" \
-            "gog auth login"
-        return
+    # Auth check: gog stores tokens in macOS Keychain, so config_exists is always false.
+    # Use credentials file as the reliable signal that gog has been authenticated.
+    local creds_file
+    if $IS_MACOS; then
+        creds_file="$HOME/Library/Application Support/gogcli/credentials.json"
     else
-        report_result "google.auth" "fail" "gog not authenticated" \
+        creds_file="$HOME/.config/gogcli/credentials.json"
+    fi
+
+    if [ -f "$creds_file" ]; then
+        report_result "google.auth" "pass" "gog credentials found ($creds_file)"
+    else
+        report_result "google.auth" "fail" "gog credentials not found — not authenticated" \
             "gog auth login"
         return
     fi
 
     # Determine account flag for per-service tests
-    local account_flag=""
     local conf_account="${CHECKLIST_CONF[GOOGLE_ACCOUNT]:-}"
-    if [ -n "$conf_account" ]; then
-        account_flag="--account $conf_account"
-    fi
+    local account_flag=""
+    [ -n "$conf_account" ] && account_flag="--account $conf_account"
 
     if [ -z "$conf_account" ]; then
         report_result "google.account" "skip" "GOOGLE_ACCOUNT not set — skipping per-service tests" \
@@ -46,30 +45,31 @@ check_google() {
 
     report_result "google.account" "pass" "Using account: $conf_account"
 
-    # Gmail read test
+    # Gmail — live API call confirms auth actually works
     # shellcheck disable=SC2086
-    if safe_timeout 10 gog gmail list --limit 1 --json --no-input $account_flag &>/dev/null 2>&1; then
+    if safe_timeout 10 gog gmail search 'newer_than:1d' --max 1 \
+        --json --no-input $account_flag &>/dev/null 2>&1; then
         report_result "google.gmail" "pass" "Gmail: accessible"
     else
-        report_result "google.gmail" "warn" "Gmail: could not list messages" \
+        report_result "google.gmail" "warn" "Gmail: API call failed" \
             "gog auth login  # may need to re-grant Gmail scope"
     fi
 
-    # Calendar test
+    # Calendar
     # shellcheck disable=SC2086
     if safe_timeout 10 gog calendar list --json --no-input $account_flag &>/dev/null 2>&1; then
         report_result "google.calendar" "pass" "Google Calendar: accessible"
     else
-        report_result "google.calendar" "warn" "Google Calendar: could not list calendars" \
+        report_result "google.calendar" "warn" "Google Calendar: API call failed" \
             "gog auth login  # may need to re-grant Calendar scope"
     fi
 
-    # Drive test
+    # Drive
     # shellcheck disable=SC2086
     if safe_timeout 10 gog drive ls / --json --no-input --max 1 $account_flag &>/dev/null 2>&1; then
         report_result "google.drive" "pass" "Google Drive: accessible"
     else
-        report_result "google.drive" "warn" "Google Drive: could not list files" \
+        report_result "google.drive" "warn" "Google Drive: API call failed" \
             "gog auth login  # may need to re-grant Drive scope"
     fi
 }
