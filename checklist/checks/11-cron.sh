@@ -32,19 +32,26 @@ check_cron() {
         return
     fi
 
-    # Parse data rows: skip header line (starts with "ID") and non-data lines.
-    # Data rows start with a UUID (8 hex chars, dash, ...)
-    local data_rows
+    # Isolate header and data rows (data rows start with a UUID)
+    local header_line data_rows
+    header_line=$(echo "$cron_output" | grep -E '^ID ')
     data_rows=$(echo "$cron_output" | grep -E '^[0-9a-f]{8}-')
 
-    local total
-    total=$(echo "$data_rows" | grep -c '.' 2>/dev/null || echo 0)
-    [ -z "$data_rows" ] && total=0
+    local total=0
+    [ -n "$data_rows" ] && total=$(echo "$data_rows" | wc -l | tr -d ' ')
 
     if [ "$total" -eq 0 ]; then
         report_result "cron.list" "skip" "No cron jobs registered" \
             "Ask OpenClaw to register a cron job"
         return
+    fi
+
+    # Find the character position of the Status column from the header.
+    # The output is fixed-width so cut by position to avoid Schedule's spaces.
+    local status_col=1
+    if [ -n "$header_line" ]; then
+        status_col=$(echo "$header_line" | grep -bo 'Status' | cut -d: -f1)
+        status_col=$((status_col + 1))   # cut -c is 1-indexed
     fi
 
     # Collect names and broken jobs
@@ -53,12 +60,11 @@ check_cron() {
 
     while IFS= read -r row; do
         [ -z "$row" ] && continue
-        # Fields: ID Name Schedule Next Last Status Target Agent
-        # Name is column 2 (may contain spaces — truncated by CLI), Status is col 6
+        # Name: second whitespace field (after the 36-char UUID)
         local name status
-        # awk: skip UUID col (1), take col 2 as name, col 6 as status
         name=$(echo "$row" | awk '{print $2}')
-        status=$(echo "$row" | awk '{print $6}')
+        # Status: extract from fixed column position, then take first word
+        status=$(echo "$row" | cut -c"${status_col}"- | awk '{print $1}')
         names+=("$name")
         if [ -n "$status" ] && [ "$status" != "ok" ] && [ "$status" != "idle" ]; then
             broken+=("$name($status)")
