@@ -47,9 +47,9 @@ check_cli_versions() {
             return
         fi
 
-        # Fetch latest from npm registry (handles macOS homebrew npm wrapper)
+        # Fetch latest from npm registry (uses $NPM_CMD — set in checklist.conf)
         local latest
-        latest=$(npm_registry_view "$npm_pkg")
+        latest=$(npm_view "$npm_pkg")
 
         if [ "$latest" = "unknown" ]; then
             report_result "cli.$pkg" "pass" "$pkg v$installed (latest: unknown — may be offline)"

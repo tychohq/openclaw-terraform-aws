@@ -40,6 +40,12 @@ CHECK_CRON=false
 # survive updates without prompts.
 CHECK_KEYRING=true
 
+# ── npm Command ──
+# Override if your system has an npm wrapper (e.g. /opt/homebrew/bin/npm redirects to bun).
+# Run `which npm` to check. If it's a wrapper, set this to the real npm binary.
+# Common values: npm  |  npm-real  |  /usr/local/bin/npm
+NPM_CMD=npm
+
 # ── Google Integration Settings (used by CHECK_GOOGLE) ──
 # Set to a Google account email to run per-account service tests.
 # Leave empty to only check gog install + auth status.

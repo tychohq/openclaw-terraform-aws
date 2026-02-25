@@ -122,25 +122,16 @@ get_npm_latest() {
     npm view "$pkg" version 2>/dev/null || echo "unknown"
 }
 
-# Query npm registry for latest package version, handling macOS homebrew npm wrapper.
-# /opt/homebrew/bin/npm may be a bun-redirect wrapper that prints errors instead of
-# doing registry lookups. Prefers npm-real on macOS, falls back to npm.
-# Usage: npm_registry_view "openclaw"
-# Outputs the version string, or "unknown" on failure.
-npm_registry_view() {
-    local pkg="$1"
-    local npm_cmd="npm"
-    if $IS_MACOS && has_cmd npm-real; then
-        npm_cmd="npm-real"
-    fi
-    local result
-    result=$(safe_timeout 5 "$npm_cmd" view "$pkg" version 2>/dev/null || true)
-    # Validate: a valid version looks like digits and dots (not an error message)
-    if echo "$result" | grep -qE '^[0-9]+\.[0-9]'; then
-        echo "$result"
-    else
-        echo "unknown"
-    fi
+# npm command — configurable for systems with npm wrappers (e.g. npm-real)
+# Set NPM_CMD in checklist.conf to override. Runner updates this after config loads.
+NPM_CMD="npm"
+
+# Query npm registry for the latest version of a package.
+# Uses $NPM_CMD so users can set NPM_CMD=npm-real in checklist.conf if their
+# system has a bun-redirect wrapper at /opt/homebrew/bin/npm.
+# Usage: npm_view "openclaw"
+npm_view() {
+    safe_timeout 5 $NPM_CMD view "$1" version 2>/dev/null
 }
 
 # Check if the OpenClaw gateway process is running (OS-aware)

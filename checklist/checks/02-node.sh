@@ -23,23 +23,14 @@ check_node() {
             "$node_install_remedy"
     fi
 
-    # npm — detect macOS homebrew bun-redirect wrapper
-    if has_cmd npm; then
-        local npm_ver_out
-        npm_ver_out=$(npm --version 2>&1)
-        if echo "$npm_ver_out" | grep -qE '^[0-9]+\.[0-9]'; then
-            # Real npm — version looks like a semver
-            report_result "node.npm" "pass" "npm $npm_ver_out available"
-        elif $IS_MACOS && has_cmd npm-real; then
-            local real_ver
-            real_ver=$(npm-real --version 2>/dev/null || echo "unknown")
-            report_result "node.npm" "pass" "npm-real $real_ver available (homebrew npm is a bun redirect)"
-        else
-            report_result "node.npm" "skip" "npm is a bun redirect wrapper — use bun for package management"
-        fi
+    # npm — uses $NPM_CMD (set via NPM_CMD in checklist.conf, default: npm)
+    if has_cmd "$NPM_CMD"; then
+        local npm_ver
+        npm_ver=$($NPM_CMD --version 2>/dev/null || echo "unknown")
+        report_result "node.npm" "pass" "$NPM_CMD $npm_ver available"
     else
-        report_result "node.npm" "warn" "npm not found" \
-            "npm is bundled with Node.js — reinstall Node.js"
+        report_result "node.npm" "warn" "$NPM_CMD not found" \
+            "Set NPM_CMD in checklist.conf to point to your npm binary"
     fi
 
     # bun (optional)

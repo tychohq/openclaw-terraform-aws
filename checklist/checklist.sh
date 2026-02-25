@@ -69,6 +69,8 @@ if [ -n "$CONF_PATH" ] && [ -f "$CONF_PATH" ]; then
         value="${value//[[:space:]]/}"
         CHECKLIST_CONF["$key"]="$value"
     done < "$CONF_PATH"
+    # Apply config overrides that affect lib.sh globals
+    NPM_CMD="${CHECKLIST_CONF[NPM_CMD]:-npm}"
 elif [ -z "$SINGLE_CHECK" ]; then
     if [ "$CHECKLIST_JSON" != "true" ]; then
         echo ""
