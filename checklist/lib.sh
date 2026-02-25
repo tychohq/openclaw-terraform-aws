@@ -22,6 +22,13 @@ JSON_RESULTS="[]"
 # JSON mode flag — set to true by runner when --json is passed
 CHECKLIST_JSON=${CHECKLIST_JSON:-false}
 
+# OS detection (auto — no user config needed)
+OS_TYPE="$(uname -s)"   # Darwin or Linux
+IS_MACOS=false
+IS_LINUX=false
+[[ "$OS_TYPE" == "Darwin" ]] && IS_MACOS=true
+[[ "$OS_TYPE" == "Linux" ]]  && IS_LINUX=true
+
 # Report a check result
 # Usage: report_result "check_id" "status" "message" ["remediation"]
 # status: pass | fail | warn | skip
@@ -84,6 +91,21 @@ has_cmd() {
     command -v "$1" &>/dev/null
 }
 
+# Portable timeout — Linux has timeout(1), macOS typically does not
+# Falls back to running the command without a time limit
+# Usage: safe_timeout <seconds> <cmd> [args...]
+safe_timeout() {
+    local secs="$1"
+    shift
+    if has_cmd timeout; then
+        timeout "$secs" "$@"
+    elif has_cmd gtimeout; then
+        gtimeout "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
 # Get installed npm package version
 # Usage: get_npm_version "openclaw"
 get_npm_version() {
@@ -98,4 +120,23 @@ get_npm_version() {
 get_npm_latest() {
     local pkg="$1"
     npm view "$pkg" version 2>/dev/null || echo "unknown"
+}
+
+# Check if the OpenClaw gateway process is running (OS-aware)
+# Returns 0 if running, 1 if not
+gateway_is_running() {
+    if $IS_LINUX; then
+        safe_timeout 5 systemctl --user is-active openclaw-gateway &>/dev/null 2>&1
+    elif $IS_MACOS; then
+        launchctl list ai.openclaw.gateway 2>/dev/null | grep -q '"PID"'
+    else
+        return 1
+    fi
+}
+
+# Get the configured gateway port from openclaw.json (empty if not found)
+get_gateway_port() {
+    if has_cmd jq && [ -f "$HOME/.openclaw/openclaw.json" ]; then
+        jq -r '.gateway.port // empty' "$HOME/.openclaw/openclaw.json" 2>/dev/null
+    fi
 }

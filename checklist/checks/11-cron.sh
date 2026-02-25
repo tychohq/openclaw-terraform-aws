@@ -4,11 +4,13 @@
 check_cron() {
     section "CRON SCHEDULER"
 
-    # Prerequisite: gateway must be running
-    if ! timeout 5 systemctl --user is-active openclaw-gateway &>/dev/null 2>&1; then
+    # Prerequisite: gateway must be running (OS-aware via lib.sh helper)
+    if ! gateway_is_running; then
+        local start_cmd="openclaw gateway start"
+        $IS_LINUX && start_cmd="systemctl --user start openclaw-gateway"
         report_result "cron.gateway" "warn" \
             "Gateway is not running — skipping cron checks" \
-            "systemctl --user start openclaw-gateway"
+            "$start_cmd"
         return
     fi
 

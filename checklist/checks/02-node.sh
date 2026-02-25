@@ -5,6 +5,9 @@ check_node() {
     section "NODE.JS"
 
     # Node.js version >= 20
+    local node_install_remedy="curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && dnf install -y nodejs"
+    $IS_MACOS && node_install_remedy="brew install node@22  # or: https://nodejs.org"
+
     if has_cmd node; then
         local version major
         version=$(node --version 2>/dev/null | tr -d 'v')
@@ -13,11 +16,11 @@ check_node() {
             report_result "node.version" "pass" "Node.js v$version (>= 20 required)"
         else
             report_result "node.version" "fail" "Node.js v$version is too old (need >= 20)" \
-                "curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && dnf install -y nodejs"
+                "$node_install_remedy"
         fi
     else
         report_result "node.version" "fail" "Node.js not installed" \
-            "curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && dnf install -y nodejs"
+            "$node_install_remedy"
     fi
 
     # npm

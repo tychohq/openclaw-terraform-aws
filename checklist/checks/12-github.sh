@@ -17,7 +17,7 @@ check_github() {
     report_result "github.installed" "pass" "gh CLI installed (v$gh_ver)"
 
     # Auth status
-    if timeout 10 gh auth status &>/dev/null 2>&1; then
+    if safe_timeout 10 gh auth status &>/dev/null 2>&1; then
         report_result "github.auth" "pass" "gh authenticated"
     else
         report_result "github.auth" "fail" "gh not authenticated" \

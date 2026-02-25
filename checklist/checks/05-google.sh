@@ -17,7 +17,7 @@ check_google() {
 
     # Auth status — check config_exists + accounts
     local auth_out
-    auth_out=$(timeout 10 gog auth status 2>/dev/null || echo "")
+    auth_out=$(safe_timeout 10 gog auth status 2>/dev/null || echo "")
 
     if echo "$auth_out" | grep -qi 'config_exists.*true\|authenticated\|accounts'; then
         report_result "google.auth" "pass" "gog authenticated (config found)"
@@ -48,7 +48,7 @@ check_google() {
 
     # Gmail read test
     # shellcheck disable=SC2086
-    if timeout 10 gog gmail list --limit 1 --json --no-input $account_flag &>/dev/null 2>&1; then
+    if safe_timeout 10 gog gmail list --limit 1 --json --no-input $account_flag &>/dev/null 2>&1; then
         report_result "google.gmail" "pass" "Gmail: accessible"
     else
         report_result "google.gmail" "warn" "Gmail: could not list messages" \
@@ -57,7 +57,7 @@ check_google() {
 
     # Calendar test
     # shellcheck disable=SC2086
-    if timeout 10 gog calendar list --json --no-input $account_flag &>/dev/null 2>&1; then
+    if safe_timeout 10 gog calendar list --json --no-input $account_flag &>/dev/null 2>&1; then
         report_result "google.calendar" "pass" "Google Calendar: accessible"
     else
         report_result "google.calendar" "warn" "Google Calendar: could not list calendars" \
@@ -66,7 +66,7 @@ check_google() {
 
     # Drive test
     # shellcheck disable=SC2086
-    if timeout 10 gog drive ls / --json --no-input --max 1 $account_flag &>/dev/null 2>&1; then
+    if safe_timeout 10 gog drive ls / --json --no-input --max 1 $account_flag &>/dev/null 2>&1; then
         report_result "google.drive" "pass" "Google Drive: accessible"
     else
         report_result "google.drive" "warn" "Google Drive: could not list files" \

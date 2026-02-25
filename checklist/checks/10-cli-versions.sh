@@ -24,7 +24,7 @@ check_cli_versions() {
 
         # Fetch latest from npm with timeout — graceful offline handling
         local latest
-        latest=$(timeout 5 npm view "$pkg" version 2>/dev/null || echo "unknown")
+        latest=$(safe_timeout 5 npm view "$pkg" version 2>/dev/null || echo "unknown")
 
         if [ "$latest" = "unknown" ]; then
             report_result "cli.$pkg" "pass" "$pkg v$installed (latest: unknown — may be offline)"
