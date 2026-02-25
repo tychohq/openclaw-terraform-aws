@@ -36,6 +36,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Available check IDs: gateway node disk discord google memory"
             echo "                     image-gen whisper skills cli-versions cron github"
+            echo "                     keyring context"
             exit 0
             ;;
         *)

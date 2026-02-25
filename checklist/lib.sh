@@ -68,6 +68,15 @@ report_result() {
     fi
 }
 
+# Print a purely informational message — no pass/fail, no counter change
+# Usage: info_msg "Model: claude-opus-4-6 (200k context window)"
+info_msg() {
+    local msg="$1"
+    if [ "$CHECKLIST_JSON" != "true" ]; then
+        echo -e "  ${BLUE}ℹ️${NC}  $msg"
+    fi
+}
+
 # Print section header
 # Usage: section "CORE INFRASTRUCTURE"
 section() {
