@@ -35,8 +35,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --check <id>      Run a single check (e.g. gateway, disk, github)"
             echo ""
             echo "Available check IDs: gateway node disk discord slack google memory"
-            echo "                     image-gen whisper skills cli-versions cron github"
-            echo "                     keyring context slack"
+            echo "                     image-gen speech-to-text skills cli-versions cron"
+            echo "                     github keyring context"
             exit 0
             ;;
         *)

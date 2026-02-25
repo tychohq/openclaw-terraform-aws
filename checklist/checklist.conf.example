@@ -13,13 +13,13 @@ CHECK_SLACK=false
 # CHECK_TELEGRAM=false    # not yet implemented
 
 # ── Integrations ──
-CHECK_GOOGLE=false
+CHECK_GOOGLE=true
 CHECK_GITHUB=false
 # CHECK_1PASSWORD=false   # not yet implemented
 
 # ── AI Features ──
-CHECK_IMAGE_GEN=false
-CHECK_WHISPER=false
+CHECK_IMAGE_GEN=true
+CHECK_SPEECH_TO_TEXT=true
 
 # ── Memory & Workspace ──
 CHECK_MEMORY=true
@@ -31,7 +31,7 @@ CHECK_SKILLS=true
 CHECK_CLI_VERSIONS=true
 
 # ── Cron ──
-CHECK_CRON=false
+CHECK_CRON=true
 
 # ── Context & Session Settings ──
 # Informational only — displays model, context pruning, compaction settings.

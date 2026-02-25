@@ -1,8 +1,8 @@
 #!/bin/bash
-# Check: Voice transcription backend (fluidaudio CLI, Whisper API, etc.)
+# Check: Speech-to-text / voice transcription backend
 
-check_whisper() {
-    section "VOICE TRANSCRIPTION"
+check_speech_to_text() {
+    section "SPEECH-TO-TEXT"
 
     local config_file="$HOME/.openclaw/openclaw.json"
 
