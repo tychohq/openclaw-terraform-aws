@@ -32,10 +32,13 @@ check_gateway() {
     # Check for multiple gateway processes — only the service manager should run the gateway
     local gw_count=0
     if $IS_LINUX; then
-        gw_count=$(pgrep -c openclaw-gateway 2>/dev/null || echo 0)
+        gw_count=$(pgrep -c -f 'openclaw.*gateway' 2>/dev/null || echo 0)
     elif $IS_MACOS; then
         gw_count=$(pgrep -f 'openclaw-gateway' 2>/dev/null | wc -l | tr -d ' ')
     fi
+    # Sanitize: strip whitespace/newlines, default to 0
+    gw_count=$(echo "$gw_count" | tr -d '[:space:]')
+    gw_count=${gw_count:-0}
 
     if [ "$gw_count" -gt 1 ]; then
         report_result "gateway.process_count" "fail" \

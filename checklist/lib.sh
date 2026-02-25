@@ -127,8 +127,7 @@ get_npm_version() {
 # Get latest npm registry version
 # Usage: get_npm_latest "openclaw"
 get_npm_latest() {
-    local pkg="$1"
-    npm view "$pkg" version 2>/dev/null || echo "unknown"
+    npm_view "$1"
 }
 
 # npm command — configurable for systems with npm wrappers (e.g. npm-real)
@@ -138,9 +137,24 @@ NPM_CMD="npm"
 # Query npm registry for the latest version of a package.
 # Uses $NPM_CMD so users can set NPM_CMD=npm-real in checklist.conf if their
 # system has a bun-redirect wrapper at /opt/homebrew/bin/npm.
+# Falls back to curl + registry.npmjs.org if npm is unavailable.
 # Usage: npm_view "openclaw"
 npm_view() {
-    safe_timeout 5 $NPM_CMD view "$1" version 2>/dev/null
+    local pkg="$1" ver=""
+
+    # Try npm/bun view first
+    if has_cmd "$NPM_CMD"; then
+        ver=$(safe_timeout 10 $NPM_CMD view "$pkg" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+
+    # Fallback: curl the npm registry directly
+    if [ -z "$ver" ] && has_cmd curl; then
+        ver=$(safe_timeout 10 curl -sf "https://registry.npmjs.org/$pkg/latest" 2>/dev/null | \
+            grep -oE '"version"\s*:\s*"[0-9]+\.[0-9]+\.[0-9]+"' | \
+            grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+
+    echo "${ver:-unknown}"
 }
 
 # Check if the OpenClaw gateway process is running (OS-aware)

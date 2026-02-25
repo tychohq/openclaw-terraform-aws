@@ -39,6 +39,9 @@ openclaw-auth-profiles.json
 .env.*
 !.env.example
 
+# Checklist local config (machine-specific — use .example to create)
+checklist/checklist.conf
+
 # Content dirs — all content lives in mac-mini-setup, not here
 openclaw-workspace/
 openclaw-skills/
