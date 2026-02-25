@@ -116,3 +116,17 @@ variable "timezone" {
   type        = string
   default     = "UTC"
 }
+
+# ── Health Checklist ───────────────────────────────────────────────────────────
+
+variable "deploy_checklist" {
+  description = "When true, deploy the health check scripts to ~/.openclaw/workspace/scripts/checklist/"
+  type        = bool
+  default     = true
+}
+
+variable "checklist_checks" {
+  description = "Map of health check names to enabled/disabled. Keys use underscores (e.g. {\"gateway\" = true, \"node\" = true, \"image_gen\" = false}). Controls which checks run when checklist.sh is executed."
+  type        = map(bool)
+  default     = {}
+}
