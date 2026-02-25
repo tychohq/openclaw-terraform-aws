@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check: Cron scheduler — job files and gateway prerequisite
+# Check: Cron scheduler — jobs registered via gateway API
 
 check_cron() {
     section "CRON SCHEDULER"
@@ -16,29 +16,62 @@ check_cron() {
 
     report_result "cron.gateway" "pass" "Gateway prerequisite: running"
 
-    # Check cron job files
-    local cron_dir="$HOME/.openclaw/workspace/cron-jobs"
-
-    if [ ! -d "$cron_dir" ]; then
-        report_result "cron.files" "skip" "No cron-jobs directory found ($cron_dir)" \
-            "Ask OpenClaw to create a cron job — it will create the directory"
+    if ! has_cmd openclaw; then
+        report_result "cron.list" "fail" "openclaw CLI not found" \
+            "Install openclaw to manage cron jobs"
         return
     fi
 
-    local cron_count
-    cron_count=$(find "$cron_dir" -maxdepth 1 -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
+    # Fetch registered cron jobs from gateway API
+    local cron_output
+    cron_output=$(safe_timeout 10 openclaw cron list 2>/dev/null)
 
-    if [ "$cron_count" -gt 0 ]; then
-        report_result "cron.files" "pass" "$cron_count cron job file(s) in $cron_dir"
+    if [ $? -ne 0 ] || [ -z "$cron_output" ]; then
+        report_result "cron.list" "warn" "openclaw cron list failed or returned no output" \
+            "openclaw cron list  # check manually"
+        return
+    fi
 
-        # List each job file
-        while IFS= read -r job_file; do
-            local job_name
-            job_name=$(basename "$job_file" .json)
-            report_result "cron.job.$job_name" "pass" "Cron job defined: $job_name"
-        done < <(find "$cron_dir" -maxdepth 1 -name "*.json" 2>/dev/null | sort)
-    else
-        report_result "cron.files" "skip" "No cron job files in $cron_dir" \
+    # Parse data rows: skip header line (starts with "ID") and non-data lines.
+    # Data rows start with a UUID (8 hex chars, dash, ...)
+    local data_rows
+    data_rows=$(echo "$cron_output" | grep -E '^[0-9a-f]{8}-')
+
+    local total
+    total=$(echo "$data_rows" | grep -c '.' 2>/dev/null || echo 0)
+    [ -z "$data_rows" ] && total=0
+
+    if [ "$total" -eq 0 ]; then
+        report_result "cron.list" "skip" "No cron jobs registered" \
             "Ask OpenClaw to register a cron job"
+        return
+    fi
+
+    # Collect names and broken jobs
+    local names=()
+    local broken=()
+
+    while IFS= read -r row; do
+        [ -z "$row" ] && continue
+        # Fields: ID Name Schedule Next Last Status Target Agent
+        # Name is column 2 (may contain spaces — truncated by CLI), Status is col 6
+        local name status
+        # awk: skip UUID col (1), take col 2 as name, col 6 as status
+        name=$(echo "$row" | awk '{print $2}')
+        status=$(echo "$row" | awk '{print $6}')
+        names+=("$name")
+        if [ -n "$status" ] && [ "$status" != "ok" ] && [ "$status" != "idle" ]; then
+            broken+=("$name($status)")
+        fi
+    done <<< "$data_rows"
+
+    report_result "cron.list" "pass" "$total cron jobs registered: ${names[*]}"
+
+    if [ "${#broken[@]}" -gt 0 ]; then
+        report_result "cron.broken" "warn" \
+            "${#broken[@]} job(s) with unexpected status: ${broken[*]}" \
+            "openclaw cron list  # investigate broken jobs"
+    else
+        report_result "cron.broken" "pass" "All cron jobs have healthy status"
     fi
 }
