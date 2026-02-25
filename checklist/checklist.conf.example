@@ -33,6 +33,13 @@ CHECK_CLI_VERSIONS=true
 # ── Cron ──
 CHECK_CRON=false
 
+# ── Credential Storage ──
+# Recommended: always on — catches tools using OS keyring instead of file-based auth.
+# OS keyring (macOS Keychain, gnome-keyring) breaks on headless EC2 and requires
+# manual re-auth after CLI updates. File-based credentials in ~/.openclaw/.env
+# survive updates without prompts.
+CHECK_KEYRING=true
+
 # ── Google Integration Settings (used by CHECK_GOOGLE) ──
 # Set to a Google account email to run per-account service tests.
 # Leave empty to only check gog install + auth status.

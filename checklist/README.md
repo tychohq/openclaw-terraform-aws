@@ -67,6 +67,31 @@ If `GOOGLE_ACCOUNT` is empty, the check only verifies `gog` is installed and aut
 | `cli-versions` | `10-cli-versions.sh` | openclaw, clawhub, agent-browser, mcporter vs npm latest |
 | `cron` | `11-cron.sh` | Cron job files in workspace, gateway prerequisite |
 | `github` | `12-github.sh` | gh CLI installed, gh auth status |
+| `keyring` | `13-keyring.sh` | Credential storage — warns when tools use OS keyring instead of files |
+
+## The OS Keyring Gotcha
+
+**TL;DR: file-based credentials survive CLI updates; keyring credentials do not.**
+
+Several CLIs (`gh`, `gog`) default to storing auth tokens in the OS keyring — macOS Keychain on Mac, gnome-keyring/libsecret on Linux. This causes two distinct problems:
+
+**On headless EC2 (Linux):** If a keyring daemon is installed, tools that use it will hang or fail silently when there's no desktop session to handle the unlock prompt. The gateway process has no TTY, so any tool that tries to pop a keyring dialog blocks forever.
+
+**On macOS after CLI updates:** When a CLI updates and calls the keychain for the first time with a new binary signature, macOS shows an "Allow [app] to use credentials in your keychain?" prompt. If you're away from your desk — or if this happens inside an automated flow — the call hangs until the dialog is dismissed.
+
+**The fix:** use file-based credentials everywhere.
+
+```bash
+# gh: store token in env var (picked up automatically)
+echo "GITHUB_TOKEN=ghp_..." >> ~/.openclaw/.env
+
+# gog: check if a --keyring-backend file flag exists in your version
+gog auth login --keyring-backend file
+
+# General: export in .env, let openclaw load it at gateway start
+```
+
+The `keyring` check (`CHECK_KEYRING=true`) detects when tools are using OS keyring and tells you exactly which ones.
 
 ## Exit Codes
 
