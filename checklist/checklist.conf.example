@@ -9,7 +9,7 @@ CHECK_DISK=true
 
 # ── Channels (enable what you use) ──
 CHECK_DISCORD=false
-# CHECK_SLACK=false       # not yet implemented
+CHECK_SLACK=false
 # CHECK_TELEGRAM=false    # not yet implemented
 
 # ── Integrations ──

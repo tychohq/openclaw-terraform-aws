@@ -34,9 +34,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --config <path>   Path to checklist.conf (default: same dir or ~/.openclaw/)"
             echo "  --check <id>      Run a single check (e.g. gateway, disk, github)"
             echo ""
-            echo "Available check IDs: gateway node disk discord google memory"
+            echo "Available check IDs: gateway node disk discord slack google memory"
             echo "                     image-gen whisper skills cli-versions cron github"
-            echo "                     keyring context"
+            echo "                     keyring context slack"
             exit 0
             ;;
         *)
