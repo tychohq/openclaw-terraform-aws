@@ -26,20 +26,52 @@ check_memory() {
     model=$(echo "$memory_output" | awk '/^Model:/{print $2}')
     report_result "memory.provider" "pass" "Memory provider: ${provider:-unknown} (${model:-unknown})"
 
-    # Indexed files and chunks: "Indexed: 300/1663 files · 2760 chunks"
-    local indexed_line indexed_files total_files chunks
-    indexed_line=$(echo "$memory_output" | grep '^Indexed:')
-    indexed_files=$(echo "$indexed_line" | grep -oE '[0-9]+/' | head -1 | tr -d '/')
-    total_files=$(echo "$indexed_line" | grep -oE '/[0-9]+' | head -1 | tr -d '/')
-    chunks=$(echo "$indexed_line" | grep -oE '[0-9]+ chunks' | awk '{print $1}')
+    # Per-source breakdown from "By source:" section
+    # Lines: "  memory · 291/292 files · 1938 chunks"
+    local in_by_source=false found_sources=false
+    while IFS= read -r line; do
+        if echo "$line" | grep -q '^By source:'; then
+            in_by_source=true
+            continue
+        fi
+        if $in_by_source; then
+            # Indented source lines start with spaces
+            if echo "$line" | grep -qE '^  [^ ]'; then
+                found_sources=true
+                local src_name src_indexed src_total src_chunks
+                src_name=$(echo "$line" | awk -F' · ' '{gsub(/^[[:space:]]+/,"",$1); print $1}')
+                src_indexed=$(echo "$line" | grep -oE '[0-9]+/' | head -1 | tr -d '/')
+                src_total=$(echo "$line" | grep -oE '/[0-9]+' | head -1 | tr -d '/')
+                src_chunks=$(echo "$line" | grep -oE '[0-9]+ chunks' | awk '{print $1}')
 
-    if [ -n "$indexed_files" ]; then
+                if [ -n "$src_indexed" ] && [ -n "$src_total" ] && [ "$src_total" -gt 0 ]; then
+                    local pct src_status
+                    pct=$((src_indexed * 100 / src_total))
+                    if   [ "$pct" -lt 10 ]; then src_status="fail"
+                    elif [ "$pct" -lt 50 ]; then src_status="warn"
+                    else                          src_status="pass"
+                    fi
+                    local safe_src
+                    safe_src=$(echo "$src_name" | tr -cs 'a-zA-Z0-9' '_' | sed 's/_$//')
+                    report_result "memory.source.$safe_src" "$src_status" \
+                        "${src_name} files: ${src_indexed}/${src_total} indexed (${pct}%)${src_chunks:+ · $src_chunks chunks}"
+                fi
+            else
+                # Non-indented line ends the section
+                in_by_source=false
+            fi
+        fi
+    done <<< "$memory_output"
+
+    if ! $found_sources; then
+        # Fallback: show total if per-source parsing failed
+        local indexed_line indexed_files total_files chunks
+        indexed_line=$(echo "$memory_output" | grep '^Indexed:')
+        indexed_files=$(echo "$indexed_line" | grep -oE '[0-9]+/' | head -1 | tr -d '/')
+        total_files=$(echo "$indexed_line" | grep -oE '/[0-9]+' | head -1 | tr -d '/')
+        chunks=$(echo "$indexed_line" | grep -oE '[0-9]+ chunks' | awk '{print $1}')
         report_result "memory.indexed" "pass" \
-            "Indexed: ${indexed_files}/${total_files:-?} files · ${chunks:-?} chunks"
-    else
-        report_result "memory.indexed" "warn" \
-            "Could not parse indexed file count" \
-            "openclaw memory status  # check manually"
+            "Indexed: ${indexed_files:-?}/${total_files:-?} files · ${chunks:-?} chunks"
     fi
 
     # Dirty flag: warn if index needs reindexing

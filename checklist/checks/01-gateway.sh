@@ -29,6 +29,22 @@ check_gateway() {
 
     report_result "gateway.running" "pass" "Gateway is running (openclaw health responded)"
 
+    # Check for multiple gateway processes — only the service manager should run the gateway
+    local gw_count=0
+    if $IS_LINUX; then
+        gw_count=$(pgrep -c openclaw-gateway 2>/dev/null || echo 0)
+    elif $IS_MACOS; then
+        gw_count=$(pgrep -f 'openclaw-gateway' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [ "$gw_count" -gt 1 ]; then
+        report_result "gateway.process_count" "fail" \
+            "Multiple gateway processes detected ($gw_count found) — only the service manager (launchd/systemd) should run the gateway" \
+            "pkill -f 'openclaw-gateway' && openclaw gateway start  # kill stale processes and restart via service"
+    elif [ "$gw_count" -eq 1 ]; then
+        report_result "gateway.process_count" "pass" "Single gateway process (correct)"
+    fi
+
     # Parse channel status lines: "Discord: ok (@Axel) (995ms)"
     while IFS= read -r line; do
         local channel status

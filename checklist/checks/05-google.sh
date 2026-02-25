@@ -37,13 +37,14 @@ check_google() {
     local account_flag=""
     [ -n "$conf_account" ] && account_flag="--account $conf_account"
 
-    if [ -z "$conf_account" ]; then
-        report_result "google.account" "skip" "GOOGLE_ACCOUNT not set — skipping per-service tests" \
-            "Set GOOGLE_ACCOUNT=you@gmail.com in checklist.conf"
-        return
+    if [ -n "$conf_account" ]; then
+        report_result "google.account" "pass" "Using account: $conf_account"
+    else
+        # GOOGLE_ACCOUNT not set — try without --account (gog uses its default account)
+        report_result "google.account" "skip" \
+            "GOOGLE_ACCOUNT not set — using gog default account" \
+            "Set GOOGLE_ACCOUNT=you@gmail.com in checklist.conf to be explicit"
     fi
-
-    report_result "google.account" "pass" "Using account: $conf_account"
 
     # Gmail — live API call confirms auth actually works
     # shellcheck disable=SC2086
