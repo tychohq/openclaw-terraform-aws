@@ -21,6 +21,18 @@ _comma_number() {
     echo "$1" | rev | sed 's/[0-9]\{3\}/&,/g' | rev | sed 's/^,//'
 }
 
+# Convert minutes to human-readable duration: 525600 → "1 year"
+_humanize_minutes() {
+    local m="$1"
+    if   [ "$m" -lt 60 ];    then echo "${m} minute$([ "$m" -ne 1 ] && echo s)"
+    elif [ "$m" -lt 1440 ];  then local h=$((m / 60));   echo "${h} hour$([ "$h" -ne 1 ] && echo s)"
+    elif [ "$m" -lt 10080 ]; then local d=$((m / 1440)); echo "${d} day$([ "$d" -ne 1 ] && echo s)"
+    elif [ "$m" -lt 43200 ]; then local w=$((m / 10080)); echo "${w} week$([ "$w" -ne 1 ] && echo s)"
+    elif [ "$m" -lt 525600 ]; then local mo=$((m / 43200)); echo "${mo} month$([ "$mo" -ne 1 ] && echo s)"
+    else local yr=$((m / 525600)); echo "${yr} year$([ "$yr" -ne 1 ] && echo s)"
+    fi
+}
+
 check_context() {
     section "CONTEXT & SESSION SETTINGS"
 
@@ -38,6 +50,7 @@ check_context() {
     local model_json
     model_json=$(safe_timeout 5 openclaw config get agents.defaults.model 2>/dev/null)
 
+    local fallbacks=""
     if [ -n "$model_json" ]; then
         local primary
         primary=$(echo "$model_json" | jq -r '.primary // empty' 2>/dev/null)
@@ -53,12 +66,9 @@ check_context() {
             fi
         fi
 
-        # Fallback models
-        local fallbacks
         fallbacks=$(echo "$model_json" | \
             jq -r '.fallbacks // [] | .[]' 2>/dev/null | \
             sed 's|.*/||' | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
-        [ -n "$fallbacks" ] && info_msg "Fallback models: $fallbacks"
     fi
 
     # ── Context pruning ────────────────────────────────────────────────────────
@@ -85,10 +95,39 @@ check_context() {
         compaction_mode=$(echo "$compaction_json" | jq -r '.mode               // "unknown"' 2>/dev/null)
         reserve_floor=$(echo "$compaction_json"   | jq -r '.reserveTokensFloor // empty'     2>/dev/null)
 
-        info_msg "Compaction: $compaction_mode mode"
-
         if [ -n "$reserve_floor" ]; then
-            info_msg "Reserve tokens floor: $(_comma_number "$reserve_floor")"
+            info_msg "Compaction: $compaction_mode mode, reserve floor: $(_comma_number "$reserve_floor") tokens"
+        else
+            info_msg "Compaction: $compaction_mode mode"
         fi
     fi
+
+    # ── Session reset ─────────────────────────────────────────────────────────
+    local reset_json
+    reset_json=$(safe_timeout 5 openclaw config get session.reset 2>/dev/null)
+
+    if [ -n "$reset_json" ]; then
+        local reset_mode idle_minutes
+        reset_mode=$(echo "$reset_json"    | jq -r '.mode         // "unknown"' 2>/dev/null)
+        idle_minutes=$(echo "$reset_json"  | jq -r '.idleMinutes  // empty'    2>/dev/null)
+
+        case "$reset_mode" in
+            off|never)
+                info_msg "Session reset: disabled (sessions never expire)"
+                ;;
+            idle)
+                if [ -n "$idle_minutes" ] && [ "$idle_minutes" -gt 0 ] 2>/dev/null; then
+                    info_msg "Session reset: idle mode (resets after $(_humanize_minutes "$idle_minutes") of inactivity)"
+                else
+                    info_msg "Session reset: idle mode"
+                fi
+                ;;
+            *)
+                info_msg "Session reset: $reset_mode"
+                ;;
+        esac
+    fi
+
+    # ── Fallback models (shown last) ──────────────────────────────────────────
+    [ -n "$fallbacks" ] && info_msg "Fallback models: $fallbacks"
 }

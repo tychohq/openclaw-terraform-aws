@@ -58,22 +58,12 @@ _humanize_cron_schedule() {
 
         # Single specific hour
         if echo "$hour_f" | grep -qE '^[0-9]+$'; then
-            local h m
-            h=$((10#$hour_f))
-            m=$((10#$min_f))
-            if [ "$h" -lt 12 ]; then
-                [ "$h" -eq 0 ] && h=12
-                [ "$m" -eq 0 ] && echo "daily at ${h}am" || printf "daily at %d:%02dam\n" "$h" "$m"
-            else
-                h=$((h - 12))
-                [ "$h" -eq 0 ] && h=12
-                [ "$m" -eq 0 ] && echo "daily at ${h}pm" || printf "daily at %d:%02dpm\n" "$h" "$m"
-            fi
+            echo "daily"
             return
         fi
 
-        # Fallback: show raw fields
-        echo "cron $min_f $hour_f $dom_f"
+        # Fallback
+        echo "scheduled"
         return
     fi
 
@@ -163,15 +153,14 @@ check_cron() {
         last=$(echo "$row"   | cut -c${last_col}-$((status_col - 1)) | xargs)
         status=$(echo "$row" | cut -c${status_col}-               | awk '{print $1}')
 
-        local human_sched raw_cron
+        local human_sched
         human_sched=$(_humanize_cron_schedule "$sched")
-        raw_cron=$(_extract_cron_raw "$sched")
 
         local last_str
         if [ -z "$last" ] || [ "$last" = "-" ]; then
-            last_str="never run"
+            last_str="not yet run"
         else
-            last_str="last: $last"
+            last_str="last ran: $last"
         fi
 
         local status_level
@@ -186,7 +175,7 @@ check_cron() {
         safe_name=$(echo "$name" | tr -cs 'a-zA-Z0-9' '_' | sed 's/_*$//')
 
         report_result "cron.job.$safe_name" "$status_level" \
-            "$name — $human_sched ($raw_cron) — $last_str — $status"
+            "$name — $human_sched — $last_str"
 
     done <<< "$data_rows"
 
