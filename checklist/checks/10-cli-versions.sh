@@ -8,8 +8,9 @@ check_cli_versions() {
     # optional_clis: skip silently if not installed
     # Format: "binary:npm_pkg" — use "__skip__" as npm_pkg for non-npm tools
     local required_clis=("openclaw:openclaw" "clawhub:clawhub" "agent-browser:agent-browser" "mcporter:mcporter")
-    local optional_clis=("gog:__skip__" "bird:bird")
-    # gog is a Homebrew formula (Go binary from github.com/steipete/gogcli), not on npm
+    local optional_clis=("bird:bird")
+    # brew_clis: "binary:formula" — checked against brew instead of npm registry
+    local brew_clis=("gog:gogcli")
 
     # Extract installed version — tries --version (stdout+stderr), then -V fallback
     _get_installed_version() {
@@ -64,11 +65,56 @@ check_cli_versions() {
         fi
     }
 
+    # Check brew-managed CLIs against brew registry instead of npm
+    _check_brew_cli() {
+        local entry="$1"
+        local binary="${entry%%:*}"
+        local formula="${entry##*:}"
+
+        if ! has_cmd "$binary"; then
+            report_result "cli.$binary" "skip" "$binary: not installed (optional)" \
+                "brew install $formula"
+            return
+        fi
+
+        local installed
+        installed=$(_get_installed_version "$binary")
+
+        if ! has_cmd brew; then
+            report_result "cli.$binary" "pass" \
+                "$binary v$installed (brew not available — no version check)"
+            return
+        fi
+
+        local brew_latest
+        brew_latest=$(safe_timeout 10 brew info "$formula" 2>/dev/null | \
+            grep -oE 'stable [0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}' | head -1)
+
+        if [ -z "$brew_latest" ]; then
+            report_result "cli.$binary" "pass" \
+                "$binary v$installed (formula '$formula' not found in brew)"
+            return
+        fi
+
+        if safe_timeout 10 brew outdated 2>/dev/null | grep -qi "$formula"; then
+            report_result "cli.$binary" "warn" \
+                "$binary v$installed (brew latest: v$brew_latest)" \
+                "brew upgrade $formula"
+        else
+            report_result "cli.$binary" "pass" \
+                "$binary v$installed (up to date)"
+        fi
+    }
+
     for entry in "${required_clis[@]}"; do
         _check_cli_version "$entry" false
     done
 
     for entry in "${optional_clis[@]}"; do
         _check_cli_version "$entry" true
+    done
+
+    for entry in "${brew_clis[@]}"; do
+        _check_brew_cli "$entry"
     done
 }
