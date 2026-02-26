@@ -12,7 +12,7 @@ dnf update -y
 
 # Install Node.js 22
 curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
-dnf install -y nodejs git jq openssl%{ if length(extra_packages) > 0 } ${join(" ", extra_packages)}%{ endif }
+dnf install -y nodejs git jq openssl zsh%{ if length(extra_packages) > 0 } ${join(" ", extra_packages)}%{ endif }
 
 echo "[$(date)] System packages installed."
 
@@ -22,11 +22,13 @@ timedatectl set-timezone "${timezone}"
 
 # ── Create openclaw User (idempotent) ─────────────────────────────────────────
 
-id -u openclaw &>/dev/null || useradd -m -s /bin/bash openclaw
+id -u openclaw &>/dev/null || useradd -m -s /bin/zsh openclaw
+# Ensure zsh is the login shell even if user already exists
+chsh -s /bin/zsh openclaw 2>/dev/null || true
 
 # ── Install OpenClaw and Tools Globally ───────────────────────────────────────
 
-npm install -g openclaw clawhub agent-browser mcporter gogcli
+npm install -g openclaw clawhub agent-browser mcporter gogcli @anthropic-ai/claude-code
 echo "[$(date)] OpenClaw and tools installed."
 
 # ── Directory Structure ───────────────────────────────────────────────────────
@@ -67,6 +69,34 @@ if ! grep -q "^GATEWAY_AUTH_TOKEN=." /home/openclaw/.openclaw/.env; then
 fi
 chmod 600 /home/openclaw/.openclaw/.env
 echo "[$(date)] .env file written."
+
+# ── Configure Claude Code API Key ─────────────────────────────────────────────
+# Extract ANTHROPIC_API_KEY from .env and write Claude Code config for the openclaw user
+
+ANTHROPIC_KEY=$(grep "^ANTHROPIC_API_KEY=" /home/openclaw/.openclaw/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+if [ -n "$ANTHROPIC_KEY" ]; then
+  mkdir -p /home/openclaw/.claude
+  cat > /home/openclaw/.claude/settings.json << CLAUDEEOF
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)"
+    ],
+    "deny": []
+  }
+}
+CLAUDEEOF
+  # Set the API key and cc alias in both shells
+  for rcfile in /home/openclaw/.zshrc /home/openclaw/.bashrc; do
+    echo "export ANTHROPIC_API_KEY=$${ANTHROPIC_KEY}" >> "$rcfile"
+    echo 'alias cc="claude --dangerously-skip-permissions"' >> "$rcfile"
+  done
+  chown -R openclaw:openclaw /home/openclaw/.claude
+  echo "[$(date)] Claude Code configured with Anthropic API key + cc alias."
+fi
 
 # ── Patch Slack allowFrom from SLACK_OWNER_USER_ID in .env ────────────────────
 # If the .env has SLACK_OWNER_USER_ID and the config has a slack channel,
