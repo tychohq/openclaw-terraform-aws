@@ -64,6 +64,9 @@ openclaw_config_json        = file("../../mac-mini-setup/openclaw-secrets.json")
 openclaw_env                = file("../../mac-mini-setup/openclaw-secrets.env")
 openclaw_auth_profiles_json = file("../../mac-mini-setup/openclaw-auth-profiles.json")
 
+# ── Google Workspace (GOG CLI) ─────────────────────────────────────────────────
+google_oauth_credentials_json = file("../../mac-mini-setup/google-credentials.json")
+
 # ── Workspace Seed Files ───────────────────────────────────────────────────────
 #
 # Written to /home/openclaw/.openclaw/workspace/ on the instance.

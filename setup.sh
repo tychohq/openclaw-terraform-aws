@@ -857,6 +857,11 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         TELEGRAM_OWNER_ID="${TELEGRAM_OWNER_ID:-}"
         OWNER_NAME="${OWNER_NAME:-}"
         TIMEZONE="${TIMEZONE:-America/New_York}"
+        GOOGLE_OAUTH_CREDENTIALS_FILE="${GOOGLE_OAUTH_CREDENTIALS_FILE:-}"
+        if [ -n "$GOOGLE_OAUTH_CREDENTIALS_FILE" ] && [ ! -f "$GOOGLE_OAUTH_CREDENTIALS_FILE" ]; then
+            echo -e "${RED}Error: GOOGLE_OAUTH_CREDENTIALS_FILE not found: $GOOGLE_OAUTH_CREDENTIALS_FILE${NC}"
+            exit 1
+        fi
     else
     echo ""
     echo -e "${BLUE}── LLM Provider ──────────────────────────────${NC}"
@@ -1091,6 +1096,36 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
             echo -e "${RED}Error: Telegram owner chat ID is required${NC}"
             exit 1
         fi
+    fi
+
+    echo ""
+    echo -e "${BLUE}── Google Workspace (GOG CLI) ─────────────────${NC}"
+    echo ""
+    echo "GOG CLI gives your agent access to Gmail, Calendar, and Drive."
+    echo "Requires a credentials.json from Google Cloud Console."
+    echo ""
+
+    _ENV_GOOGLE_CREDS="${GOOGLE_OAUTH_CREDENTIALS_FILE:-}"
+
+    if [ -n "$_ENV_GOOGLE_CREDS" ]; then
+        read -p "Google OAuth credentials.json path [$_ENV_GOOGLE_CREDS] (blank=skip): " _INPUT
+        GOOGLE_OAUTH_CREDENTIALS_FILE="${_INPUT:-$_ENV_GOOGLE_CREDS}"
+    else
+        read -p "Google OAuth credentials.json path (blank=skip): " GOOGLE_OAUTH_CREDENTIALS_FILE
+    fi
+
+    if [ -n "$GOOGLE_OAUTH_CREDENTIALS_FILE" ]; then
+        if [ ! -f "$GOOGLE_OAUTH_CREDENTIALS_FILE" ]; then
+            echo -e "${RED}Error: File not found: $GOOGLE_OAUTH_CREDENTIALS_FILE${NC}"
+            exit 1
+        fi
+        if ! jq -e '.web.client_id and .web.client_secret' "$GOOGLE_OAUTH_CREDENTIALS_FILE" > /dev/null 2>&1; then
+            echo -e "${RED}Error: credentials.json must contain web.client_id and web.client_secret${NC}"
+            exit 1
+        fi
+        echo -e "  Google OAuth: ${GREEN}✓ loaded${NC}"
+    else
+        echo -e "  Google OAuth: ${CYAN}skipped${NC}"
     fi
 
     echo ""
@@ -1640,6 +1675,9 @@ if [ -f /tmp/openclaw-env ]; then
 fi
 if [ -n "${AUTH_PROFILES_JSON:-}" ]; then
     export TF_VAR_openclaw_auth_profiles_json="$AUTH_PROFILES_JSON"
+fi
+if [ -n "${GOOGLE_OAUTH_CREDENTIALS_FILE:-}" ] && [ -f "${GOOGLE_OAUTH_CREDENTIALS_FILE:-}" ]; then
+    export TF_VAR_google_oauth_credentials_json="$(cat "$GOOGLE_OAUTH_CREDENTIALS_FILE")"
 fi
 
 # Export credentials for Terraform compatibility

@@ -26,7 +26,7 @@ id -u openclaw &>/dev/null || useradd -m -s /bin/bash openclaw
 
 # ── Install OpenClaw and Tools Globally ───────────────────────────────────────
 
-npm install -g openclaw clawhub agent-browser mcporter
+npm install -g openclaw clawhub agent-browser mcporter gogcli
 echo "[$(date)] OpenClaw and tools installed."
 
 # ── Directory Structure ───────────────────────────────────────────────────────
@@ -179,6 +179,15 @@ CHECKLISTCONFEOF
 %{ endif ~}
 
 echo "[$(date)] Health checklist deployed to $CHECKLIST_DEST"
+
+%{ endif ~}
+%{ if google_oauth_credentials_json_b64 != "" ~}
+# ── Configure GOG CLI (Google OAuth) ─────────────────────────────────────────
+
+echo "${google_oauth_credentials_json_b64}" | base64 -d > /tmp/gog-credentials.json
+su - openclaw -c "gog auth credentials set /tmp/gog-credentials.json"
+rm -f /tmp/gog-credentials.json
+echo "[$(date)] GOG CLI credentials configured."
 
 %{ endif ~}
 # ── Set Ownership (before git init — npm install runs as root) ────────────────

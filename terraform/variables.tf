@@ -158,3 +158,12 @@ variable "instance_name" {
   type        = string
   default     = ""
 }
+
+# ── Google Workspace (GOG CLI) ───────────────────────────────────────────────
+
+variable "google_oauth_credentials_json" {
+  description = "Content of your Google OAuth credentials.json (client_id + client_secret from Google Cloud Console). Required for GOG CLI (Gmail, Calendar, Drive). Leave empty to skip."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

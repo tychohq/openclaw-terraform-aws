@@ -34,3 +34,9 @@ openclaw_env = <<-EOT
   ANTHROPIC_API_KEY=sk-ant-...
   GATEWAY_AUTH_TOKEN=YOUR_GATEWAY_TOKEN
 EOT
+
+# ── Google Workspace (GOG CLI) ───────────────────────────────
+# Download credentials.json from Google Cloud Console:
+#   console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client
+# After deploy, each user authorizes via: gog auth add user@domain.com --remote
+# google_oauth_credentials_json = file("path/to/google-credentials.json")

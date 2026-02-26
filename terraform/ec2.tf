@@ -47,19 +47,20 @@ resource "aws_instance" "openclaw" {
   }
 
   user_data = base64encode(templatefile("${path.module}/cloud-init.sh.tftpl", {
-    has_config                      = local.has_config
-    openclaw_config_json_b64        = var.openclaw_config_json != "" ? base64encode(var.openclaw_config_json) : ""
-    openclaw_env_b64                = var.openclaw_env != "" ? base64encode(var.openclaw_env) : ""
-    openclaw_auth_profiles_json_b64 = var.openclaw_auth_profiles_json != "" ? base64encode(var.openclaw_auth_profiles_json) : ""
-    workspace_files_b64             = { for k, v in var.workspace_files : k => base64encode(v) }
-    custom_skills_b64               = { for skill_name, skill_files in var.custom_skills : skill_name => { for filepath, content in skill_files : filepath => base64encode(content) } }
-    cron_jobs_b64                   = { for name, content in var.cron_jobs : name => base64encode(content) }
-    clawhub_skills                  = var.clawhub_skills
-    extra_packages                  = var.extra_packages
-    owner_name                      = var.owner_name
-    timezone                        = var.timezone
-    deploy_checklist                = var.deploy_checklist
-    checklist_checks                = var.checklist_checks
+    has_config                        = local.has_config
+    openclaw_config_json_b64          = var.openclaw_config_json != "" ? base64encode(var.openclaw_config_json) : ""
+    openclaw_env_b64                  = var.openclaw_env != "" ? base64encode(var.openclaw_env) : ""
+    openclaw_auth_profiles_json_b64   = var.openclaw_auth_profiles_json != "" ? base64encode(var.openclaw_auth_profiles_json) : ""
+    workspace_files_b64               = { for k, v in var.workspace_files : k => base64encode(v) }
+    custom_skills_b64                 = { for skill_name, skill_files in var.custom_skills : skill_name => { for filepath, content in skill_files : filepath => base64encode(content) } }
+    cron_jobs_b64                     = { for name, content in var.cron_jobs : name => base64encode(content) }
+    clawhub_skills                    = var.clawhub_skills
+    extra_packages                    = var.extra_packages
+    owner_name                        = var.owner_name
+    timezone                          = var.timezone
+    deploy_checklist                  = var.deploy_checklist
+    checklist_checks                  = var.checklist_checks
+    google_oauth_credentials_json_b64 = var.google_oauth_credentials_json != "" ? base64encode(var.google_oauth_credentials_json) : ""
   }))
 
   tags = {

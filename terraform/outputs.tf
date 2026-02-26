@@ -80,3 +80,8 @@ output "connect_command" {
 output "next_steps" {
   value = local.has_config ? local._next_steps_configured : local._next_steps_manual
 }
+
+output "google_oauth_configured" {
+  description = "Whether Google OAuth credentials were provided"
+  value       = var.google_oauth_credentials_json != "" ? "Yes — run 'gog auth add user@domain.com --remote' via SSM to authorize" : "No"
+}
