@@ -61,6 +61,7 @@ resource "aws_instance" "openclaw" {
     deploy_checklist                  = var.deploy_checklist
     checklist_checks                  = var.checklist_checks
     google_oauth_credentials_json_b64 = var.google_oauth_credentials_json != "" ? base64encode(var.google_oauth_credentials_json) : ""
+    aws_region                        = var.aws_region
   }))
 
   tags = {

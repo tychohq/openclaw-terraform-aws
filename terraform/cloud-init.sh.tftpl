@@ -28,8 +28,14 @@ usermod -s /bin/zsh openclaw
 
 # ── Install OpenClaw and Tools Globally ───────────────────────────────────────
 
-npm install -g openclaw clawhub agent-browser mcporter gogcli @anthropic-ai/claude-code
+npm install -g openclaw clawhub agent-browser mcporter gogcli
 echo "[$(date)] OpenClaw and tools installed."
+
+# ── Install Claude Code (native installer) ────────────────────────────────────
+
+su - openclaw -c "curl -fsSL https://claude.ai/install.sh | bash" || \
+  npm install -g @anthropic-ai/claude-code  # fallback to npm if native fails
+echo "[$(date)] Claude Code installed."
 
 # ── Directory Structure ───────────────────────────────────────────────────────
 
@@ -70,13 +76,11 @@ fi
 chmod 600 /home/openclaw/.openclaw/.env
 echo "[$(date)] .env file written."
 
-# ── Configure Claude Code API Key ─────────────────────────────────────────────
-# Extract ANTHROPIC_API_KEY from .env and write Claude Code config for the openclaw user
+# ── Configure Claude Code ──────────────────────────────────────────────────────
+# Supports both direct Anthropic API key and AWS Bedrock bearer token from .env
 
-ANTHROPIC_KEY=$(grep "^ANTHROPIC_API_KEY=" /home/openclaw/.openclaw/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
-if [ -n "$ANTHROPIC_KEY" ]; then
-  mkdir -p /home/openclaw/.claude
-  cat > /home/openclaw/.claude/settings.json << CLAUDEEOF
+mkdir -p /home/openclaw/.claude
+cat > /home/openclaw/.claude/settings.json << CLAUDEEOF
 {
   "permissions": {
     "allow": [
@@ -89,13 +93,30 @@ if [ -n "$ANTHROPIC_KEY" ]; then
   }
 }
 CLAUDEEOF
-  # Set the API key and cc alias in both shells
-  for rcfile in /home/openclaw/.zshrc /home/openclaw/.bashrc; do
+
+ANTHROPIC_KEY=$(grep "^ANTHROPIC_API_KEY=" /home/openclaw/.openclaw/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+BEDROCK_TOKEN=$(grep "^AWS_BEARER_TOKEN_BEDROCK=" /home/openclaw/.openclaw/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+
+for rcfile in /home/openclaw/.zshrc /home/openclaw/.bashrc; do
+  # Always add the cc alias
+  echo 'alias cc="claude --dangerously-skip-permissions"' >> "$rcfile"
+
+  if [ -n "$BEDROCK_TOKEN" ]; then
+    echo "export CLAUDE_CODE_USE_BEDROCK=1" >> "$rcfile"
+    echo "export AWS_BEARER_TOKEN_BEDROCK=$${BEDROCK_TOKEN}" >> "$rcfile"
+    echo "export AWS_REGION=${aws_region}" >> "$rcfile"
+  elif [ -n "$ANTHROPIC_KEY" ]; then
     echo "export ANTHROPIC_API_KEY=$${ANTHROPIC_KEY}" >> "$rcfile"
-    echo 'alias cc="claude --dangerously-skip-permissions"' >> "$rcfile"
-  done
-  chown -R openclaw:openclaw /home/openclaw/.claude
+  fi
+done
+
+chown -R openclaw:openclaw /home/openclaw/.claude
+if [ -n "$BEDROCK_TOKEN" ]; then
+  echo "[$(date)] Claude Code configured with Bedrock bearer token + cc alias."
+elif [ -n "$ANTHROPIC_KEY" ]; then
   echo "[$(date)] Claude Code configured with Anthropic API key + cc alias."
+else
+  echo "[$(date)] Claude Code installed (no API key found — configure manually)."
 fi
 
 # ── Patch Slack allowFrom from SLACK_OWNER_USER_ID in .env ────────────────────
