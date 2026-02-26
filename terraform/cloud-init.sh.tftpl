@@ -24,7 +24,7 @@ timedatectl set-timezone "${timezone}"
 
 id -u openclaw &>/dev/null || useradd -m -s /bin/zsh openclaw
 # Ensure zsh is the login shell even if user already exists
-chsh -s /bin/zsh openclaw 2>/dev/null || true
+usermod -s /bin/zsh openclaw
 
 # ── Install OpenClaw and Tools Globally ───────────────────────────────────────
 
