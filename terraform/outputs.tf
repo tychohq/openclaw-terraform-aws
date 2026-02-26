@@ -63,8 +63,13 @@ output "instance_id" {
 }
 
 output "public_ip" {
-  description = "Public IP (may change on restart)"
+  description = "Public IP (may change on restart; empty if in private subnet)"
   value       = aws_instance.openclaw.public_ip
+}
+
+output "private_ip" {
+  description = "Private IP address"
+  value       = aws_instance.openclaw.private_ip
 }
 
 output "connect_command" {

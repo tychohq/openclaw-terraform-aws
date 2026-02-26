@@ -1540,6 +1540,11 @@ EOF
 [ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
 [ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars
 
+# Existing infrastructure (deploy into existing VPC)
+[ -n "${EXISTING_VPC_ID:-}" ] && echo "existing_vpc_id            = \"$EXISTING_VPC_ID\"" >> terraform.tfvars
+[ -n "${EXISTING_SUBNET_ID:-}" ] && echo "existing_subnet_id         = \"$EXISTING_SUBNET_ID\"" >> terraform.tfvars
+[ -n "${EXISTING_SECURITY_GROUP_ID:-}" ] && echo "existing_security_group_id = \"$EXISTING_SECURITY_GROUP_ID\"" >> terraform.tfvars
+
 # Pass secrets via TF_VAR_ environment variables (safe for JSON with special chars)
 if [ -f /tmp/openclaw-config.json ]; then
     export TF_VAR_openclaw_config_json="$(cat /tmp/openclaw-config.json)"

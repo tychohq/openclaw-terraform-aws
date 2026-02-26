@@ -103,6 +103,28 @@ variable "extra_packages" {
   default     = []
 }
 
+# ── Existing Infrastructure (optional) ─────────────────────────────────────────
+# Provide these to deploy into an existing VPC instead of creating a new one.
+# When set, Terraform skips VPC/subnet/IGW creation and uses the provided IDs.
+
+variable "existing_vpc_id" {
+  description = "ID of an existing VPC to deploy into (e.g. vpc-0c7c8a0c...). Leave empty to create a new VPC."
+  type        = string
+  default     = ""
+}
+
+variable "existing_subnet_id" {
+  description = "ID of an existing subnet to deploy into (e.g. subnet-0937c049...). Required when existing_vpc_id is set."
+  type        = string
+  default     = ""
+}
+
+variable "existing_security_group_id" {
+  description = "ID of an existing security group (e.g. sg-0aede158...). Leave empty to create a new outbound-only SG."
+  type        = string
+  default     = ""
+}
+
 # ── Owner Info (written to USER.md if no workspace_files provided) ─────────────
 
 variable "owner_name" {
