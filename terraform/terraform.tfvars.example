@@ -38,5 +38,5 @@ EOT
 # ── Google Workspace (GOG CLI) ───────────────────────────────
 # Download credentials.json from Google Cloud Console:
 #   console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client
-# After deploy, each user authorizes via: gog auth add user@domain.com --remote
+# After deploy, each user authorizes via: gog auth add user@domain.com --remote --readonly
 # google_oauth_credentials_json = file("path/to/google-credentials.json")

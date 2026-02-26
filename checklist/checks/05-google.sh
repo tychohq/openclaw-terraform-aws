@@ -47,7 +47,7 @@ _gog_test_service() {
         report_result "$result_id" "pass" "$label: $access (tested)"
     else
         report_result "$result_id" "warn" "$label: API call failed" \
-            "gog auth add $account --services $(echo "$label" | tr '[:upper:]' '[:lower:]')  # re-authorize"
+            "gog auth add $account --readonly --services $(echo "$label" | tr '[:upper:]' '[:lower:]')  # re-authorize"
     fi
 }
 

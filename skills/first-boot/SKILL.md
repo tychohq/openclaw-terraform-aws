@@ -71,7 +71,7 @@ What's your Google email address? (or say "skip" to set this up later)
 
 When they provide an email:
 ```bash
-gog auth add <email> --remote 2>&1
+gog auth add <email> --remote --readonly 2>&1
 ```
 
 This command outputs an authorization URL. Extract the URL and send it:
