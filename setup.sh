@@ -1470,10 +1470,20 @@ echo "  Deployment Name:  $DEPLOYMENT_NAME"
 [ -n "$OWNER_NAME" ] && echo "  Owner:            $OWNER_NAME"
 echo ""
 echo "  Resources to be created:"
-echo "    • 1 VPC (10.0.0.0/16) with '${DEPLOYMENT_NAME}-vpc' tag"
-echo "    • 1 Public subnet with '${DEPLOYMENT_NAME}-public' tag"
-echo "    • 1 Internet Gateway"
-echo "    • 1 Security Group (outbound only)"
+if [ -n "${EXISTING_VPC_ID:-}" ]; then
+    echo "    • Using existing VPC: ${EXISTING_VPC_ID}"
+    echo "    • Using existing subnet: ${EXISTING_SUBNET_ID}"
+    if [ -n "${EXISTING_SECURITY_GROUP_ID:-}" ]; then
+        echo "    • Using existing security group: ${EXISTING_SECURITY_GROUP_ID}"
+    else
+        echo "    • 1 Security Group (outbound only)"
+    fi
+else
+    echo "    • 1 VPC (10.0.0.0/16) with '${DEPLOYMENT_NAME}-vpc' tag"
+    echo "    • 1 Public subnet with '${DEPLOYMENT_NAME}-public' tag"
+    echo "    • 1 Internet Gateway"
+    echo "    • 1 Security Group (outbound only)"
+fi
 echo "    • 1 IAM Role (${DEPLOYMENT_NAME}-ec2-role)"
 echo "    • 1 EC2 instance (t4g.medium)"
 echo ""
@@ -1554,6 +1564,20 @@ if [ -f /tmp/openclaw-env ]; then
 fi
 if [ -n "${AUTH_PROFILES_JSON:-}" ]; then
     export TF_VAR_openclaw_auth_profiles_json="$AUTH_PROFILES_JSON"
+fi
+
+# Export credentials for Terraform compatibility
+# Older Terraform versions can't read AWS CLI v2 SSO cache directly.
+# If using an SSO profile, export temporary credentials as env vars.
+if [ -n "${AWS_PROFILE:-}" ]; then
+    set +e
+    SSO_CREDS=$(aws configure export-credentials --profile "$AWS_PROFILE" --format env 2>/dev/null)
+    SSO_RC=$?
+    set -e
+    if [ $SSO_RC -eq 0 ] && [ -n "$SSO_CREDS" ]; then
+        eval "$SSO_CREDS"
+        unset AWS_PROFILE  # env vars take priority, avoid conflicts
+    fi
 fi
 
 # Initialize Terraform

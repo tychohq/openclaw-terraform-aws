@@ -19,12 +19,6 @@ data "aws_ami" "amazon_linux_2023" {
 locals {
   # Non-sensitive boolean used in outputs and user_data template
   has_config = nonsensitive(var.openclaw_config_json) != ""
-
-  # Checklist shell scripts — embedded in cloud-init as base64
-  checklist_files_b64 = var.deploy_checklist ? {
-    for f in fileset("${path.module}/../checklist", "**/*.sh") :
-      f => filebase64("${path.module}/../checklist/${f}")
-  } : {}
 }
 
 # EC2 Instance
@@ -65,7 +59,6 @@ resource "aws_instance" "openclaw" {
     owner_name                      = var.owner_name
     timezone                        = var.timezone
     deploy_checklist                = var.deploy_checklist
-    checklist_files_b64             = local.checklist_files_b64
     checklist_checks                = var.checklist_checks
   }))
 

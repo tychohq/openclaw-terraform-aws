@@ -142,7 +142,7 @@ variable "timezone" {
 # ── Health Checklist ───────────────────────────────────────────────────────────
 
 variable "deploy_checklist" {
-  description = "When true, deploy the health check scripts to ~/.openclaw/workspace/scripts/checklist/"
+  description = "When true, clone and deploy the health check scripts from the repo to ~/.openclaw/workspace/scripts/checklist/"
   type        = bool
   default     = true
 }
