@@ -184,6 +184,16 @@ echo "[$(date)] Cron job files written."
 echo "  NOTE: To register cron jobs, ask OpenClaw to register the files in ~/.openclaw/workspace/cron-jobs/"
 
 %{ endif ~}
+%{ if assistant_name != "OpenClaw" ~}
+# ── Write IDENTITY.md from assistant_name ─────────────────────────────────────
+
+cat > /home/openclaw/.openclaw/workspace/IDENTITY.md << 'IDENTITYMD'
+# Identity
+
+Name: ${assistant_name}
+IDENTITYMD
+
+%{ endif ~}
 %{ if owner_name != "" && !has_config ~}
 # ── Write USER.md from owner_name ─────────────────────────────────────────────
 

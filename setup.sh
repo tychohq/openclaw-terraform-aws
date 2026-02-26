@@ -832,6 +832,7 @@ fi
 
 CONFIG_JSON=""
 ENV_CONTENT=""
+ASSISTANT_NAME=""
 OWNER_NAME=""
 TIMEZONE="UTC"
 TF_VAR_ARGS=""
@@ -855,6 +856,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         DISCORD_OWNER_ID="${DISCORD_OWNER_ID:-}"
         TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
         TELEGRAM_OWNER_ID="${TELEGRAM_OWNER_ID:-}"
+        ASSISTANT_NAME="${ASSISTANT_NAME:-OpenClaw}"
         OWNER_NAME="${OWNER_NAME:-}"
         TIMEZONE="${TIMEZONE:-America/New_York}"
         GOOGLE_OAUTH_CREDENTIALS_FILE="${GOOGLE_OAUTH_CREDENTIALS_FILE:-}"
@@ -936,6 +938,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     _ENV_DISCORD_OWNER="${DISCORD_OWNER_ID:-}"
     _ENV_TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
     _ENV_TELEGRAM_OWNER="${TELEGRAM_OWNER_ID:-}"
+    _ENV_ASSISTANT_NAME="${ASSISTANT_NAME:-OpenClaw}"
     _ENV_OWNER_NAME="${OWNER_NAME:-}"
     _ENV_TIMEZONE="${TIMEZONE:-America/New_York}"
 
@@ -1129,8 +1132,15 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     fi
 
     echo ""
-    echo -e "${BLUE}── Owner Info ────────────────────────────────${NC}"
+    echo -e "${BLUE}── Identity ──────────────────────────────────${NC}"
     echo ""
+    if [ -n "$_ENV_ASSISTANT_NAME" ] && [ "$_ENV_ASSISTANT_NAME" != "OpenClaw" ]; then
+        read -p "Assistant name [$_ENV_ASSISTANT_NAME]: " _INPUT
+        ASSISTANT_NAME="${_INPUT:-$_ENV_ASSISTANT_NAME}"
+    else
+        read -p "Assistant name (your AI's display name) [OpenClaw]: " _INPUT
+        ASSISTANT_NAME="${_INPUT:-OpenClaw}"
+    fi
     if [ -n "$_ENV_OWNER_NAME" ]; then
         read -p "Your name [$_ENV_OWNER_NAME]: " _INPUT
         OWNER_NAME="${_INPUT:-$_ENV_OWNER_NAME}"
@@ -1564,6 +1574,7 @@ echo ""
 echo "  Target Account:   $AWS_ACCOUNT_ID"
 echo "  Target Region:    $AWS_REGION"
 echo "  Deployment Name:  $DEPLOYMENT_NAME"
+[ "$ASSISTANT_NAME" != "OpenClaw" ] && echo "  Assistant:        $ASSISTANT_NAME"
 [ -n "$OWNER_NAME" ] && echo "  Owner:            $OWNER_NAME"
 echo ""
 echo "  Resources to be created:"
@@ -1657,6 +1668,7 @@ aws_region      = "$AWS_REGION"
 deployment_name = "$DEPLOYMENT_NAME"
 EOF
 
+[ "$ASSISTANT_NAME" != "OpenClaw" ] && echo "assistant_name  = \"$ASSISTANT_NAME\"" >> terraform.tfvars
 [ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
 [ -n "${INSTANCE_NAME:-}" ] && echo "instance_name   = \"$INSTANCE_NAME\"" >> terraform.tfvars
 [ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars

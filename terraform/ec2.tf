@@ -56,6 +56,7 @@ resource "aws_instance" "openclaw" {
     cron_jobs_b64                     = { for name, content in var.cron_jobs : name => base64encode(content) }
     clawhub_skills                    = var.clawhub_skills
     extra_packages                    = var.extra_packages
+    assistant_name                    = var.assistant_name
     owner_name                        = var.owner_name
     timezone                          = var.timezone
     deploy_checklist                  = var.deploy_checklist

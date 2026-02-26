@@ -23,6 +23,14 @@ WORKSPACE=""
 WRITE_ENV=false
 ENV_FILE="${REPO_DIR}/.env"
 
+# Source .env for defaults (ASSISTANT_NAME, etc.)
+if [ -f "$ENV_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+fi
+# Default app name from ASSISTANT_NAME env var
+APP_NAME="${ASSISTANT_NAME:-}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
