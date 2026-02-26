@@ -68,6 +68,26 @@ fi
 chmod 600 /home/openclaw/.openclaw/.env
 echo "[$(date)] .env file written."
 
+# ── Patch Slack allowFrom from SLACK_OWNER_USER_ID in .env ────────────────────
+# If the .env has SLACK_OWNER_USER_ID and the config has a slack channel,
+# ensure dmPolicy=allowlist and allowFrom includes the owner.
+
+SLACK_OWNER_USER_ID=$(grep "^SLACK_OWNER_USER_ID=" /home/openclaw/.openclaw/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+if [ -n "$SLACK_OWNER_USER_ID" ] && [ -f /home/openclaw/.openclaw/openclaw.json ]; then
+  if jq -e '.channels.slack' /home/openclaw/.openclaw/openclaw.json >/dev/null 2>&1; then
+    jq --arg uid "$SLACK_OWNER_USER_ID" '
+      .channels.slack.dmPolicy = "allowlist" |
+      .channels.slack.groupPolicy = "allowlist" |
+      .channels.slack.allowFrom = (
+        (.channels.slack.allowFrom // []) |
+        if index($uid) then . else . + [$uid] end
+      )
+    ' /home/openclaw/.openclaw/openclaw.json > /tmp/openclaw-patched.json && \
+    mv /tmp/openclaw-patched.json /home/openclaw/.openclaw/openclaw.json
+    echo "[$(date)] Slack allowFrom patched with owner $SLACK_OWNER_USER_ID"
+  fi
+fi
+
 %{ endif ~}
 %{ if openclaw_auth_profiles_json_b64 != "" ~}
 # ── Write Auth Profiles ───────────────────────────────────────────────────────

@@ -116,6 +116,7 @@ if [ "$AUTO_MODE" = true ]; then
     if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
         HAS_SLACK=true
         [ -z "${SLACK_APP_TOKEN:-}" ] && MISSING+=("SLACK_APP_TOKEN   (required when SLACK_BOT_TOKEN is set — Socket Mode app token)")
+        [ -z "${SLACK_OWNER_USER_ID:-}" ] && MISSING+=("SLACK_OWNER_USER_ID (required when SLACK_BOT_TOKEN is set — your Slack member ID)")
     fi
 
     if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
@@ -847,6 +848,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         SLACK_APP_TOKEN_VAL="${SLACK_APP_TOKEN:-}"
         SLACK_BOT_TOKEN_VAL="${SLACK_BOT_TOKEN:-}"
         SLACK_CHANNEL_ID="${SLACK_CHANNEL_ID:-}"
+        SLACK_OWNER_ID="${SLACK_OWNER_USER_ID:-}"
         DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
         DISCORD_GUILD_ID="${DISCORD_GUILD_ID:-}"
         DISCORD_CHANNEL_ID="${DISCORD_CHANNEL_ID:-}"
@@ -922,6 +924,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     _ENV_SLACK_APP_TOKEN="${SLACK_APP_TOKEN:-}"
     _ENV_SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"
     _ENV_SLACK_CHANNEL="${SLACK_CHANNEL_ID:-}"
+    _ENV_SLACK_OWNER="${SLACK_OWNER_USER_ID:-}"
     _ENV_DISCORD_TOKEN="${DISCORD_BOT_TOKEN:-}"
     _ENV_DISCORD_GUILD="${DISCORD_GUILD_ID:-}"
     _ENV_DISCORD_CHANNEL="${DISCORD_CHANNEL_ID:-}"
@@ -934,6 +937,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     SLACK_APP_TOKEN_VAL=""
     SLACK_BOT_TOKEN_VAL=""
     SLACK_CHANNEL_ID=""
+    SLACK_OWNER_ID=""
     DISCORD_TOKEN=""
     DISCORD_GUILD_ID=""
     DISCORD_CHANNEL_ID=""
@@ -1001,6 +1005,17 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
             SLACK_CHANNEL_ID="${_INPUT:-$_ENV_SLACK_CHANNEL}"
         else
             read -p "Restrict to channel ID (blank=all channels): " SLACK_CHANNEL_ID
+        fi
+
+        if [ -n "$_ENV_SLACK_OWNER" ]; then
+            read -p "Your Slack member ID [$_ENV_SLACK_OWNER]: " _INPUT
+            SLACK_OWNER_ID="${_INPUT:-$_ENV_SLACK_OWNER}"
+        else
+            read -p "Your Slack member ID (Profile → ⋮ → Copy member ID): " SLACK_OWNER_ID
+        fi
+        if [ -z "$SLACK_OWNER_ID" ]; then
+            echo -e "${RED}Error: Slack owner user ID is required${NC}"
+            exit 1
         fi
     fi
 
@@ -1110,11 +1125,15 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
         --arg app_token "$SLACK_APP_TOKEN_VAL" \
         --arg bot_token "$SLACK_BOT_TOKEN_VAL" \
+        --arg owner_id "$SLACK_OWNER_ID" \
         '.channels.slack = {
           enabled: true,
           mode: "socket",
           appToken: $app_token,
-          botToken: $bot_token
+          botToken: $bot_token,
+          dmPolicy: "allowlist",
+          groupPolicy: "allowlist",
+          allowFrom: [$owner_id]
         }')
 
       # If a specific channel ID was provided, restrict to that channel
@@ -1135,7 +1154,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
           enabled: true,
           token: $token,
           groupPolicy: "allowlist",
-          dmPolicy: "pairing",
+          dmPolicy: "allowlist",
           allowFrom: [$owner_id],
           guilds: {
             ($guild_id): {
@@ -1161,7 +1180,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         '.channels.telegram = {
           enabled: true,
           botToken: $token,
-          dmPolicy: "pairing",
+          dmPolicy: "allowlist",
           groupPolicy: "allowlist",
           allowFrom: [$owner_id]
         }')
@@ -1182,6 +1201,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     [ -n "$OPENAI_API_KEY" ] && ENV_CONTENT+="OPENAI_API_KEY=$OPENAI_API_KEY"$'\n'
     [ -n "$SLACK_APP_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_APP_TOKEN=$SLACK_APP_TOKEN_VAL"$'\n'
     [ -n "$SLACK_BOT_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN_VAL"$'\n'
+    [ -n "$SLACK_OWNER_ID" ] && ENV_CONTENT+="SLACK_OWNER_USER_ID=$SLACK_OWNER_ID"$'\n'
     ENV_CONTENT+="GATEWAY_AUTH_TOKEN=$GATEWAY_TOKEN"$'\n'
 
     # Write secrets to temp files
