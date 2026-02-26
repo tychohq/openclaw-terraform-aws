@@ -153,6 +153,12 @@ variable "checklist_checks" {
   default     = {}
 }
 
+variable "assistant_name" {
+  description = "Display name for the AI assistant (written to IDENTITY.md if not 'OpenClaw')"
+  type        = string
+  default     = "OpenClaw"
+}
+
 variable "instance_name" {
   description = "Override the EC2 instance Name tag (defaults to deployment_name-instance)"
   type        = string
