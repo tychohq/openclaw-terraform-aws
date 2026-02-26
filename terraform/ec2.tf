@@ -63,7 +63,7 @@ resource "aws_instance" "openclaw" {
   }))
 
   tags = {
-    Name = "${var.deployment_name}-instance"
+    Name = coalesce(var.instance_name, "${var.deployment_name}-instance")
   }
 
   lifecycle {

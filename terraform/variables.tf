@@ -152,3 +152,9 @@ variable "checklist_checks" {
   type        = map(bool)
   default     = {}
 }
+
+variable "instance_name" {
+  description = "Override the EC2 instance Name tag (defaults to deployment_name-instance)"
+  type        = string
+  default     = ""
+}
