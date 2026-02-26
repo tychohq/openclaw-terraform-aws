@@ -2,7 +2,32 @@
 
 Create a Slack app for OpenClaw to connect to your workspace via Socket Mode.
 
-## Option A: From App Manifest (Recommended)
+## Option A: Automated with agent-browser (Fastest)
+
+If you have Chrome and [agent-browser](https://github.com/nickthecook/agent-browser) installed:
+
+```bash
+# 1. Start Chrome with remote debugging (if not already running)
+~/.agents/browser/launch-chrome.sh
+
+# 2. Log into https://api.slack.com in Chrome
+
+# 3. Run the automation
+./scripts/create-slack-app.sh
+
+# With options:
+./scripts/create-slack-app.sh --workspace "My Company" --app-name "OpenClaw" --write-env
+```
+
+The script will:
+- Create the app from the manifest
+- Generate the Socket Mode app-level token (`xapp-...`)
+- Install to the workspace and grab the bot token (`xoxb-...`)
+- Optionally write both tokens to `.env`
+
+**If your workspace requires admin approval:** The script detects this automatically, submits the install request, and exits with code 2. Re-run after approval to pick up the bot token.
+
+## Option B: From App Manifest (Manual)
 
 1. Go to **https://api.slack.com/apps**
 2. Click **Create New App** → **From an app manifest**
@@ -17,7 +42,7 @@ Create a Slack app for OpenClaw to connect to your workspace via Socket Mode.
 7. Go to **OAuth & Permissions** → **Install to Workspace**
    - **Copy the `xoxb-...` token** → this is your `SLACK_BOT_TOKEN`
 
-## Option B: Manual Setup
+## Option C: Manual Setup
 
 If you prefer to configure step-by-step instead of using the manifest:
 
