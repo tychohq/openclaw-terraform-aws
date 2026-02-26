@@ -159,6 +159,12 @@ variable "assistant_name" {
   default     = "OpenClaw"
 }
 
+variable "enable_first_boot" {
+  description = "Enable the first-boot onboarding wizard. The bot will message the owner on first interaction to pick a persona from righthands.dev and optionally connect Google."
+  type        = bool
+  default     = true
+}
+
 variable "instance_name" {
   description = "Override the EC2 instance Name tag (defaults to deployment_name-instance)"
   type        = string

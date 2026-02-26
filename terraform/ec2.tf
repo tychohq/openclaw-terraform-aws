@@ -57,6 +57,8 @@ resource "aws_instance" "openclaw" {
     clawhub_skills                    = var.clawhub_skills
     extra_packages                    = var.extra_packages
     assistant_name                    = var.assistant_name
+    enable_first_boot                 = var.enable_first_boot
+    first_boot_skill_b64              = var.enable_first_boot ? base64encode(file("${path.module}/../skills/first-boot/SKILL.md")) : ""
     owner_name                        = var.owner_name
     timezone                          = var.timezone
     deploy_checklist                  = var.deploy_checklist

@@ -1234,7 +1234,7 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     # Add model config — use agents.defaults.model.primary (not agents.main)
     if [ -n "$ANTHROPIC_API_KEY" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
-        '.agents.defaults.model.primary = "anthropic/claude-sonnet-4-20250514"')
+        '.agents.defaults.model.primary = "anthropic/claude-opus-4-6"')
     elif [ -n "$OPENAI_API_KEY" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
         '.agents.defaults.model.primary = "openai/gpt-4o"')
@@ -1672,6 +1672,13 @@ EOF
 [ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
 [ -n "${INSTANCE_NAME:-}" ] && echo "instance_name   = \"$INSTANCE_NAME\"" >> terraform.tfvars
 [ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars
+
+# Enable first-boot onboarding wizard for Quick Setup mode
+if [ "$CONFIG_CHOICE" = "1" ]; then
+    echo "enable_first_boot = true" >> terraform.tfvars
+else
+    echo "enable_first_boot = false" >> terraform.tfvars
+fi
 
 # Existing infrastructure (deploy into existing VPC)
 [ -n "${EXISTING_VPC_ID:-}" ] && echo "existing_vpc_id            = \"$EXISTING_VPC_ID\"" >> terraform.tfvars

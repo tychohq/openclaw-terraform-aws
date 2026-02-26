@@ -184,7 +184,41 @@ echo "[$(date)] Cron job files written."
 echo "  NOTE: To register cron jobs, ask OpenClaw to register the files in ~/.openclaw/workspace/cron-jobs/"
 
 %{ endif ~}
-%{ if assistant_name != "OpenClaw" ~}
+%{ if enable_first_boot ~}
+# ── First-Boot Onboarding ─────────────────────────────────────────────────────
+# Creates the trigger file and seeds AGENTS.md with first-boot awareness.
+# The first-boot skill at ~/.openclaw/skills/first-boot/ handles the conversation.
+
+touch /home/openclaw/.openclaw/workspace/.first-boot
+
+# Deploy the first-boot skill
+mkdir -p /home/openclaw/.openclaw/skills/first-boot
+echo "${first_boot_skill_b64}" | base64 -d > /home/openclaw/.openclaw/skills/first-boot/SKILL.md
+echo "[$(date)] First-boot flag and skill deployed — onboarding will run on first interaction."
+
+# Seed AGENTS.md with first-boot check (prepend to any existing content)
+EXISTING_AGENTS=""
+[ -f /home/openclaw/.openclaw/workspace/AGENTS.md ] && EXISTING_AGENTS=$(cat /home/openclaw/.openclaw/workspace/AGENTS.md)
+
+cat > /home/openclaw/.openclaw/workspace/AGENTS.md << 'AGENTSEOF'
+# AGENTS.md
+
+## First Boot Check
+On every message, check if `~/.openclaw/workspace/.first-boot` exists.
+If it does, read the `first-boot` skill (at ~/.openclaw/skills/first-boot/SKILL.md) and follow its onboarding flow.
+Do NOT do anything else until onboarding is complete (the file is deleted).
+
+## Normal Operation
+Once `.first-boot` is gone, operate normally as a helpful AI assistant.
+AGENTSEOF
+
+if [ -n "$EXISTING_AGENTS" ]; then
+  echo "" >> /home/openclaw/.openclaw/workspace/AGENTS.md
+  echo "$EXISTING_AGENTS" >> /home/openclaw/.openclaw/workspace/AGENTS.md
+fi
+
+%{ endif ~}
+%{ if assistant_name != "OpenClaw" && !enable_first_boot ~}
 # ── Write IDENTITY.md from assistant_name ─────────────────────────────────────
 
 cat > /home/openclaw/.openclaw/workspace/IDENTITY.md << 'IDENTITYMD'
