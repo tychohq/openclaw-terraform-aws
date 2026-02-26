@@ -28,7 +28,7 @@ usermod -s /bin/zsh openclaw
 
 # ── Install OpenClaw and Tools Globally ───────────────────────────────────────
 
-npm install -g openclaw clawhub agent-browser mcporter gogcli
+npm install -g openclaw clawhub agent-browser mcporter
 echo "[$(date)] OpenClaw and tools installed."
 
 # ── Install Claude Code (native installer) ────────────────────────────────────
@@ -277,12 +277,38 @@ echo "[$(date)] Health checklist deployed to $CHECKLIST_DEST"
 
 %{ endif ~}
 %{ if google_oauth_credentials_json_b64 != "" ~}
-# ── Configure GOG CLI (Google OAuth) ─────────────────────────────────────────
+# ── Install & Configure GOG CLI (Google OAuth) ──────────────────────────────
 
+# Download GOG CLI binary from GitHub releases
+ARCH=$(uname -m)
+if [ "$ARCH" = "aarch64" ]; then
+  GOG_ARCH="arm64"
+elif [ "$ARCH" = "x86_64" ]; then
+  GOG_ARCH="amd64"
+else
+  echo "[WARN] Unsupported architecture for GOG CLI: $ARCH"
+  GOG_ARCH=""
+fi
+
+if [ -n "$GOG_ARCH" ]; then
+  GOG_VERSION="0.11.0"
+  curl -fsSL "https://github.com/steipete/gogcli/releases/download/v$${GOG_VERSION}/gogcli_$${GOG_VERSION}_linux_$${GOG_ARCH}.tar.gz" | tar xz -C /usr/local/bin gog
+  chmod +x /usr/local/bin/gog
+  echo "[$(date)] GOG CLI v$${GOG_VERSION} installed."
+fi
+
+# Configure file keyring backend (required for headless Linux)
+su - openclaw -c "gog auth keyring file"
+
+# Generate keyring password and append to .env
+GOG_KEYRING_PW="$(openssl rand -hex 16)"
+echo "GOG_KEYRING_PASSWORD=$GOG_KEYRING_PW" >> /home/openclaw/.openclaw/.env
+
+# Set OAuth credentials using the keyring password
 echo "${google_oauth_credentials_json_b64}" | base64 -d > /tmp/gog-credentials.json
-su - openclaw -c "gog auth credentials set /tmp/gog-credentials.json"
+su - openclaw -c "GOG_KEYRING_PASSWORD=$GOG_KEYRING_PW gog auth credentials set /tmp/gog-credentials.json"
 rm -f /tmp/gog-credentials.json
-echo "[$(date)] GOG CLI credentials configured."
+echo "[$(date)] GOG CLI credentials configured with file keyring."
 
 %{ endif ~}
 # ── Set Ownership (before git init — npm install runs as root) ────────────────

@@ -1122,8 +1122,8 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
             echo -e "${RED}Error: File not found: $GOOGLE_OAUTH_CREDENTIALS_FILE${NC}"
             exit 1
         fi
-        if ! jq -e '.web.client_id and .web.client_secret' "$GOOGLE_OAUTH_CREDENTIALS_FILE" > /dev/null 2>&1; then
-            echo -e "${RED}Error: credentials.json must contain web.client_id and web.client_secret${NC}"
+        if ! jq -e '(.web.client_id and .web.client_secret) or (.installed.client_id and .installed.client_secret)' "$GOOGLE_OAUTH_CREDENTIALS_FILE" > /dev/null 2>&1; then
+            echo -e "${RED}Error: credentials.json must contain client_id and client_secret (web or installed type)${NC}"
             exit 1
         fi
         echo -e "  Google OAuth: ${GREEN}✓ loaded${NC}"
