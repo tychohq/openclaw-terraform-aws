@@ -28,34 +28,67 @@ ask() {
     fi
 }
 
+DEPLOY_DIR=""
+
 # Parse flags
 for arg in "$@"; do
     case "$arg" in
         --auto)   AUTO_MODE=true ;;
         --destroy) ;; # handled below
+        --config=*) DEPLOY_DIR="${arg#--config=}" ;;
+        --config)   ;; # next arg handled below
         --help|-h)
-            echo "Usage: ./setup.sh [--auto] [--destroy]"
+            echo "Usage: ./setup.sh [--auto] [--config <dir>] [--destroy]"
             echo ""
             echo "  (no flags)  Interactive wizard — prompts for every setting"
             echo "  --auto      Non-interactive — reads all values from .env, fails if incomplete"
+            echo "  --config    Path to deployment directory (contains .env, state files)"
             echo "  --destroy   Tear down all infrastructure created by this deployment"
             echo ""
             echo "The .env file pre-fills wizard defaults and is required for --auto."
             echo "Copy .env.example to .env and fill in your values."
+            echo ""
+            echo "For multi-deployment setups, use a private repo:"
+            echo "  ./setup.sh --config ~/openclaw-deployments/myorg/my-agent --auto"
             exit 0
             ;;
     esac
 done
 
+# Handle --config <dir> (two-arg form)
+PREV_ARG=""
+for arg in "$@"; do
+    if [ "$PREV_ARG" = "--config" ]; then
+        DEPLOY_DIR="$arg"
+    fi
+    PREV_ARG="$arg"
+done
+
+# OPENCLAW_DEPLOY_DIR env var as fallback
+DEPLOY_DIR="${DEPLOY_DIR:-${OPENCLAW_DEPLOY_DIR:-}}"
+
+# Resolve deploy directory — determines where .env, tfstate, and tfvars live
+if [ -n "$DEPLOY_DIR" ]; then
+    DEPLOY_DIR="$(cd "$DEPLOY_DIR" 2>/dev/null && pwd)" || {
+        echo -e "${RED}Error: --config directory does not exist: $DEPLOY_DIR${NC}"
+        exit 1
+    }
+    ENV_FILE="$DEPLOY_DIR/.env"
+    STATE_DIR="$DEPLOY_DIR"
+else
+    ENV_FILE="$SCRIPT_DIR/.env"
+    STATE_DIR="$SCRIPT_DIR/terraform"
+fi
+
 # Source .env if it exists (pre-fills wizard prompts)
-if [ -f "$SCRIPT_DIR/.env" ]; then
+if [ -f "$ENV_FILE" ]; then
     set -a
-    source "$SCRIPT_DIR/.env"
+    source "$ENV_FILE"
     set +a
-    echo -e "${CYAN}Loaded .env file (values will be used as defaults)${NC}"
+    echo -e "${CYAN}Loaded .env file: $ENV_FILE${NC}"
     echo ""
 elif [ "$AUTO_MODE" = true ]; then
-    echo -e "${RED}Error: --auto requires a .env file but none found.${NC}"
+    echo -e "${RED}Error: --auto requires a .env file but none found at: $ENV_FILE${NC}"
     echo "Copy .env.example to .env and fill in your values."
     exit 1
 fi
@@ -1540,6 +1573,19 @@ echo "Preparing deployment to AWS account $AWS_ACCOUNT_ID in $AWS_REGION..."
 echo ""
 
 cd "$SCRIPT_DIR/terraform"
+
+# If using external deploy dir, link state files
+if [ -n "$DEPLOY_DIR" ] && [ "$DEPLOY_DIR" != "$SCRIPT_DIR/terraform" ]; then
+    # Remove any existing state files in terraform dir (they're stale/from another deploy)
+    rm -f terraform.tfstate terraform.tfstate.backup
+    # Symlink from deploy dir if state exists there
+    [ -f "$DEPLOY_DIR/terraform.tfstate" ] && ln -sf "$DEPLOY_DIR/terraform.tfstate" terraform.tfstate
+    [ -f "$DEPLOY_DIR/terraform.tfstate.backup" ] && ln -sf "$DEPLOY_DIR/terraform.tfstate.backup" terraform.tfstate.backup
+    # Ensure state will be created in deploy dir
+    TFSTATE_LINK=true
+else
+    TFSTATE_LINK=false
+fi
 
 # Create terraform.tfvars with non-secret values
 cat > terraform.tfvars << EOF
