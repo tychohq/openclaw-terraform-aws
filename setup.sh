@@ -168,12 +168,21 @@ if [[ " $* " == *" --destroy "* ]] || [ "${1:-}" = "--destroy" ]; then
     echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    if [ ! -f "$SCRIPT_DIR/terraform/terraform.tfstate" ]; then
-        echo "No Terraform state found in terraform/. Nothing to destroy."
+    # Check for state in deploy dir or terraform dir
+    DESTROY_STATE_DIR="${STATE_DIR:-$SCRIPT_DIR/terraform}"
+    if [ ! -f "$DESTROY_STATE_DIR/terraform.tfstate" ] && [ ! -f "$SCRIPT_DIR/terraform/terraform.tfstate" ]; then
+        echo "No Terraform state found. Nothing to destroy."
         exit 0
     fi
 
     cd "$SCRIPT_DIR/terraform"
+
+    # Link state from deploy dir if needed
+    if [ -n "${DEPLOY_DIR:-}" ] && [ -f "$DEPLOY_DIR/terraform.tfstate" ]; then
+        rm -f terraform.tfstate terraform.tfstate.backup
+        ln -sf "$DEPLOY_DIR/terraform.tfstate" terraform.tfstate
+        [ -f "$DEPLOY_DIR/terraform.tfstate.backup" ] && ln -sf "$DEPLOY_DIR/terraform.tfstate.backup" terraform.tfstate.backup
+    fi
 
     echo "Checking what will be destroyed..."
     echo ""
@@ -1729,6 +1738,13 @@ echo "  Applying changes (this takes 2-3 minutes)..."
 
 # Apply
 terraform apply -auto-approve tfplan
+
+# Copy state to deploy dir if using external config
+if [ "$TFSTATE_LINK" = true ] && [ -n "$DEPLOY_DIR" ]; then
+    # If terraform created new state files (not via symlink), copy them
+    [ -f terraform.tfstate ] && [ ! -L terraform.tfstate ] && cp terraform.tfstate "$DEPLOY_DIR/terraform.tfstate"
+    [ -f terraform.tfstate.backup ] && [ ! -L terraform.tfstate.backup ] && cp terraform.tfstate.backup "$DEPLOY_DIR/terraform.tfstate.backup"
+fi
 
 # Get instance ID
 INSTANCE_ID=$(terraform output -raw instance_id)
