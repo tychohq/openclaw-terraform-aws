@@ -1548,6 +1548,7 @@ deployment_name = "$DEPLOYMENT_NAME"
 EOF
 
 [ -n "$OWNER_NAME" ] && echo "owner_name      = \"$OWNER_NAME\"" >> terraform.tfvars
+[ -n "${INSTANCE_NAME:-}" ] && echo "instance_name   = \"$INSTANCE_NAME\"" >> terraform.tfvars
 [ "$TIMEZONE" != "UTC" ] && echo "timezone        = \"$TIMEZONE\"" >> terraform.tfvars
 
 # Existing infrastructure (deploy into existing VPC)
