@@ -119,6 +119,31 @@ else
   echo "[$(date)] Claude Code installed (no API key found — configure manually)."
 fi
 
+# ── Set OpenClaw agent model from .env ────────────────────────────────────────
+# If Bedrock token is present, use the Bedrock inference profile; otherwise
+# fall back to direct Anthropic provider.  Skipped when openclaw.json already
+# contains an explicit agents.defaults.model.primary (set via tfvars).
+
+if [ -f /home/openclaw/.openclaw/openclaw.json ]; then
+  HAS_MODEL=$(jq -e '.agents.defaults.model.primary' /home/openclaw/.openclaw/openclaw.json 2>/dev/null && echo yes || echo no)
+  if [ "$HAS_MODEL" = "no" ]; then
+    if [ -n "$BEDROCK_TOKEN" ]; then
+      jq '.agents.defaults.model.primary = "amazon-bedrock/us.anthropic.claude-opus-4-6-v1"' \
+        /home/openclaw/.openclaw/openclaw.json > /tmp/oc-model.json && \
+        mv /tmp/oc-model.json /home/openclaw/.openclaw/openclaw.json
+      # Ensure AWS_REGION is in .env for the Bedrock SDK
+      grep -q "^AWS_REGION=" /home/openclaw/.openclaw/.env 2>/dev/null || \
+        echo "AWS_REGION=${aws_region}" >> /home/openclaw/.openclaw/.env
+      echo "[$(date)] OpenClaw model set to amazon-bedrock (inference profile)."
+    elif [ -n "$ANTHROPIC_KEY" ]; then
+      jq '.agents.defaults.model.primary = "anthropic/claude-opus-4-6"' \
+        /home/openclaw/.openclaw/openclaw.json > /tmp/oc-model.json && \
+        mv /tmp/oc-model.json /home/openclaw/.openclaw/openclaw.json
+      echo "[$(date)] OpenClaw model set to anthropic/claude-opus-4-6."
+    fi
+  fi
+fi
+
 # ── Patch Slack allowFrom from SLACK_OWNER_USER_ID in .env ────────────────────
 # If the .env has SLACK_OWNER_USER_ID and the config has a slack channel,
 # ensure dmPolicy=allowlist and allowFrom includes the owner.

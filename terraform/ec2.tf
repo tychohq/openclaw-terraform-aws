@@ -46,7 +46,7 @@ resource "aws_instance" "openclaw" {
     http_put_response_hop_limit = 1
   }
 
-  user_data = base64encode(templatefile("${path.module}/cloud-init.sh.tftpl", {
+  user_data_base64 = base64gzip(templatefile("${path.module}/cloud-init.sh.tftpl", {
     has_config                        = local.has_config
     openclaw_config_json_b64          = var.openclaw_config_json != "" ? base64encode(var.openclaw_config_json) : ""
     openclaw_env_b64                  = var.openclaw_env != "" ? base64encode(var.openclaw_env) : ""
