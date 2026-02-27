@@ -104,8 +104,8 @@ if [ "$AUTO_MODE" = true ]; then
     [ -z "${AWS_REGION:-}" ]      && MISSING+=("AWS_REGION       (e.g. us-east-1)")
 
     # Need at least one LLM provider
-    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-        MISSING+=("ANTHROPIC_API_KEY or OPENAI_API_KEY  (at least one required)")
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
+        MISSING+=("ANTHROPIC_API_KEY, OPENAI_API_KEY, or AWS_BEARER_TOKEN_BEDROCK  (at least one required)")
     fi
 
     # Need at least one channel
@@ -1232,7 +1232,10 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     fi
 
     # Add model config — use agents.defaults.model.primary (not agents.main)
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
+    if [ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
+      CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
+        '.agents.defaults.model.primary = "amazon-bedrock/us.anthropic.claude-opus-4-6-v1"')
+    elif [ -n "$ANTHROPIC_API_KEY" ]; then
       CONFIG_JSON=$(echo "$CONFIG_JSON" | jq \
         '.agents.defaults.model.primary = "anthropic/claude-opus-4-6"')
     elif [ -n "$OPENAI_API_KEY" ]; then
@@ -1243,6 +1246,8 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     # Generate .env content
     ENV_CONTENT=""
     [ -n "$ANTHROPIC_API_KEY" ] && ENV_CONTENT+="ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"$'\n'
+    [ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ] && ENV_CONTENT+="AWS_BEARER_TOKEN_BEDROCK=$AWS_BEARER_TOKEN_BEDROCK"$'\n'
+    [ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ] && ENV_CONTENT+="AWS_REGION=${AWS_REGION:-us-west-2}"$'\n'
     [ -n "$OPENAI_API_KEY" ] && ENV_CONTENT+="OPENAI_API_KEY=$OPENAI_API_KEY"$'\n'
     [ -n "$SLACK_APP_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_APP_TOKEN=$SLACK_APP_TOKEN_VAL"$'\n'
     [ -n "$SLACK_BOT_TOKEN_VAL" ] && ENV_CONTENT+="SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN_VAL"$'\n'
