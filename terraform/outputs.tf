@@ -83,5 +83,5 @@ output "next_steps" {
 
 output "google_oauth_configured" {
   description = "Whether Google OAuth credentials were provided"
-  value       = var.google_oauth_credentials_json != "" ? "Yes — authorize via SSM: gog auth add user@domain.com --remote --step 1 --services gmail,calendar,drive (then paste redirect URL in step 2 within 5 min)" : "No"
+  value       = var.google_oauth_credentials_json != "" ? "Yes — authorize via SSM:\n  Step 1: gog auth add user@domain.com --remote --step 1 --services gmail,calendar,drive --readonly\n  Step 2: gog auth add user@domain.com --remote --step 2 --services gmail,calendar,drive --readonly --auth-url <redirect-url>\n  (paste redirect URL within 5 min; step 2 MUST include the same --services and --readonly flags)" : "No"
 }
