@@ -47,3 +47,6 @@ openclaw-workspace/
 openclaw-skills/
 cron-jobs/
 config/
+
+# OpenClaw Discord channel mapping
+.discord-channel
