@@ -37,22 +37,18 @@ check_disk() {
         fi
 
     elif $IS_MACOS; then
-        # macOS: compute used% from vm_stat page counts + sysctl total
-        local vm_out page_size total_mem
-        vm_out=$(vm_stat 2>/dev/null)
-        page_size=$(echo "$vm_out" | grep 'page size of' | grep -oE '[0-9]+')
-        total_mem=$(sysctl -n hw.memsize 2>/dev/null)
+        # macOS: use memory_pressure which accounts for inactive/purgeable/compressed
+        # pages that macOS can reclaim (raw vm_stat "free" pages is misleading)
+        local free_pct_line use_mem_pct
+        free_pct_line=$(memory_pressure 2>/dev/null | grep 'System-wide memory free percentage:')
 
-        if [ -n "$page_size" ] && [ "${page_size:-0}" -gt 0 ] && [ -n "$total_mem" ]; then
-            local total_pages free_pages spec_pages avail_pages use_mem_pct
-            total_pages=$((total_mem / page_size))
-            free_pages=$(echo "$vm_out" | awk '/Pages free:/{gsub(/\./,""); print $3}')
-            spec_pages=$(echo "$vm_out" | awk '/Pages speculative:/{gsub(/\./,""); print $3}')
-            avail_pages=$(( ${free_pages:-0} + ${spec_pages:-0} ))
-            use_mem_pct=$(( (total_pages - avail_pages) * 100 / total_pages ))
+        if [ -n "$free_pct_line" ]; then
+            local free_mem_pct
+            free_mem_pct=$(echo "$free_pct_line" | grep -oE '[0-9]+')
+            use_mem_pct=$((100 - free_mem_pct))
 
             if [ "$use_mem_pct" -lt 90 ]; then
-                report_result "disk.memory" "pass" "RAM usage: ~${use_mem_pct}%"
+                report_result "disk.memory" "pass" "RAM usage: ~${use_mem_pct}% (${free_mem_pct}% free)"
             else
                 report_result "disk.memory" "warn" "RAM usage high: ~${use_mem_pct}%" \
                     "ps aux -m | head -20  # find memory hogs"
