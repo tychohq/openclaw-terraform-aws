@@ -13,7 +13,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 AUTO_MODE=false
 
 # Helper: prompt user or use default in auto mode
@@ -26,6 +26,61 @@ ask() {
         read -p "$prompt" _input
         eval "$var_name=\"\${_input:-\$default}\""
     fi
+}
+
+# Helper: render Slack app manifest from template
+render_slack_manifest() {
+    local name="${1:-OpenClaw}"
+    local owner="${2:-}"
+    sed -e "s/\${app_name}/$name/g" -e "s/\${owner_name}/$owner/g" \
+        "$SCRIPT_DIR/templates/slack-app-manifest.json.tftpl"
+}
+
+# Helper: run a command on an EC2 instance via SSM and return output
+# Usage: run_ssm_command INSTANCE_ID REGION "command"
+run_ssm_command() {
+    local instance_id="$1" region="$2" command="$3"
+    local cmd_id output status
+
+    cmd_id=$(aws ssm send-command \
+        --instance-ids "$instance_id" \
+        --document-name "AWS-RunShellScript" \
+        --parameters "commands=[\"$command\"]" \
+        --region "$region" \
+        --output text \
+        --query 'Command.CommandId')
+
+    # Poll until complete (max ~2 minutes)
+    for i in $(seq 1 24); do
+        sleep 5
+        status=$(aws ssm get-command-invocation \
+            --command-id "$cmd_id" \
+            --instance-id "$instance_id" \
+            --region "$region" \
+            --query 'Status' --output text 2>/dev/null || echo "Pending")
+        if [ "$status" = "Success" ] || [ "$status" = "Failed" ]; then
+            break
+        fi
+    done
+
+    output=$(aws ssm get-command-invocation \
+        --command-id "$cmd_id" \
+        --instance-id "$instance_id" \
+        --region "$region" \
+        --query 'StandardOutputContent' --output text 2>/dev/null)
+
+    if [ "$status" != "Success" ]; then
+        local err_output
+        err_output=$(aws ssm get-command-invocation \
+            --command-id "$cmd_id" \
+            --instance-id "$instance_id" \
+            --region "$region" \
+            --query 'StandardErrorContent' --output text 2>/dev/null)
+        echo "ERROR: $err_output" >&2
+        return 1
+    fi
+
+    echo "$output"
 }
 
 DEPLOY_DIR=""
@@ -915,6 +970,30 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     fi
 
     echo ""
+    echo -e "${BLUE}── Identity ──────────────────────────────────${NC}"
+    echo ""
+
+    _ENV_ASSISTANT_NAME="${ASSISTANT_NAME:-OpenClaw}"
+    _ENV_OWNER_NAME="${OWNER_NAME:-}"
+    _ENV_TIMEZONE="${TIMEZONE:-America/New_York}"
+
+    if [ -n "$_ENV_ASSISTANT_NAME" ] && [ "$_ENV_ASSISTANT_NAME" != "OpenClaw" ]; then
+        read -p "Assistant name [$_ENV_ASSISTANT_NAME]: " _INPUT
+        ASSISTANT_NAME="${_INPUT:-$_ENV_ASSISTANT_NAME}"
+    else
+        read -p "Assistant name (your AI's display name) [OpenClaw]: " _INPUT
+        ASSISTANT_NAME="${_INPUT:-OpenClaw}"
+    fi
+    if [ -n "$_ENV_OWNER_NAME" ]; then
+        read -p "Your name [$_ENV_OWNER_NAME]: " _INPUT
+        OWNER_NAME="${_INPUT:-$_ENV_OWNER_NAME}"
+    else
+        read -p "Your name (for the agent to know who you are): " OWNER_NAME
+    fi
+    read -p "Timezone [$_ENV_TIMEZONE]: " _INPUT
+    TIMEZONE="${_INPUT:-$_ENV_TIMEZONE}"
+
+    echo ""
     echo -e "${BLUE}── Chat Channel ──────────────────────────────${NC}"
     echo ""
     echo "How will you talk to your OpenClaw?"
@@ -938,9 +1017,6 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     _ENV_DISCORD_OWNER="${DISCORD_OWNER_ID:-}"
     _ENV_TELEGRAM_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
     _ENV_TELEGRAM_OWNER="${TELEGRAM_OWNER_ID:-}"
-    _ENV_ASSISTANT_NAME="${ASSISTANT_NAME:-OpenClaw}"
-    _ENV_OWNER_NAME="${OWNER_NAME:-}"
-    _ENV_TIMEZONE="${TIMEZONE:-America/New_York}"
 
     SLACK_APP_TOKEN_VAL=""
     SLACK_BOT_TOKEN_VAL=""
@@ -980,8 +1056,33 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
         echo ""
         echo -e "${BLUE}── Slack Setup ───────────────────────────────${NC}"
         echo ""
-        echo "You need a Slack app with Socket Mode enabled."
-        echo "Create one at: https://api.slack.com/apps"
+        echo "Let's create a Slack app and collect the tokens."
+        echo ""
+        echo -e "${CYAN}Step 1: Create the Slack App${NC}"
+        echo ""
+        echo "Here is your app manifest (pre-filled with your assistant name):"
+        echo ""
+        echo -e "${YELLOW}┌──────────────────────────────────────────────┐${NC}"
+        render_slack_manifest "$ASSISTANT_NAME" "$OWNER_NAME"
+        echo -e "${YELLOW}└──────────────────────────────────────────────┘${NC}"
+        echo ""
+        echo "Instructions:"
+        echo "  1. Go to https://api.slack.com/apps"
+        echo "  2. Click 'Create New App' → 'From an app manifest'"
+        echo "  3. Select your workspace"
+        echo "  4. Switch to JSON tab and paste the manifest above"
+        echo "  5. Click 'Create'"
+        echo ""
+        read -p "Press Enter when your app is created..."
+        echo ""
+        echo -e "${CYAN}Step 2: Generate App-Level Token (Socket Mode)${NC}"
+        echo ""
+        echo "  1. In your app settings, go to 'Socket Mode' in the left sidebar"
+        echo "  2. Click 'Generate an app-level token'"
+        echo "  3. Name it: openclaw-socket"
+        echo "  4. Add scope: connections:write"
+        echo "  5. Click 'Generate'"
+        echo "  6. Copy the xapp-... token"
         echo ""
 
         if [ -n "$_ENV_SLACK_APP_TOKEN" ]; then
@@ -989,25 +1090,35 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
             read -p "Slack App Token (xapp-...) [$_MASKED]: " _INPUT
             SLACK_APP_TOKEN_VAL="${_INPUT:-$_ENV_SLACK_APP_TOKEN}"
         else
-            read -p "Slack App Token (xapp-... from Socket Mode settings): " SLACK_APP_TOKEN_VAL
+            read -p "Slack App Token (xapp-...): " SLACK_APP_TOKEN_VAL
         fi
         if [ -z "$SLACK_APP_TOKEN_VAL" ]; then
             echo -e "${RED}Error: Slack App Token is required${NC}"
             exit 1
         fi
 
+        echo ""
+        echo -e "${CYAN}Step 3: Install to Workspace${NC}"
+        echo ""
+        echo "  1. Go to 'OAuth & Permissions' in the left sidebar"
+        echo "  2. Click 'Install to Workspace'"
+        echo "  3. Click 'Allow' to authorize"
+        echo "  4. Copy the 'Bot User OAuth Token' (xoxb-...)"
+        echo ""
+
         if [ -n "$_ENV_SLACK_BOT_TOKEN" ]; then
             _MASKED="${_ENV_SLACK_BOT_TOKEN:0:10}...${_ENV_SLACK_BOT_TOKEN: -4}"
             read -p "Slack Bot Token (xoxb-...) [$_MASKED]: " _INPUT
             SLACK_BOT_TOKEN_VAL="${_INPUT:-$_ENV_SLACK_BOT_TOKEN}"
         else
-            read -p "Slack Bot Token (xoxb-... from OAuth & Permissions): " SLACK_BOT_TOKEN_VAL
+            read -p "Slack Bot Token (xoxb-...): " SLACK_BOT_TOKEN_VAL
         fi
         if [ -z "$SLACK_BOT_TOKEN_VAL" ]; then
             echo -e "${RED}Error: Slack Bot Token is required${NC}"
             exit 1
         fi
 
+        echo ""
         if [ -n "$_ENV_SLACK_CHANNEL" ]; then
             read -p "Restrict to channel ID [$_ENV_SLACK_CHANNEL] (blank=all channels): " _INPUT
             SLACK_CHANNEL_ID="${_INPUT:-$_ENV_SLACK_CHANNEL}"
@@ -1130,25 +1241,6 @@ if [ "$CONFIG_CHOICE" = "1" ]; then
     else
         echo -e "  Google OAuth: ${CYAN}skipped${NC}"
     fi
-
-    echo ""
-    echo -e "${BLUE}── Identity ──────────────────────────────────${NC}"
-    echo ""
-    if [ -n "$_ENV_ASSISTANT_NAME" ] && [ "$_ENV_ASSISTANT_NAME" != "OpenClaw" ]; then
-        read -p "Assistant name [$_ENV_ASSISTANT_NAME]: " _INPUT
-        ASSISTANT_NAME="${_INPUT:-$_ENV_ASSISTANT_NAME}"
-    else
-        read -p "Assistant name (your AI's display name) [OpenClaw]: " _INPUT
-        ASSISTANT_NAME="${_INPUT:-OpenClaw}"
-    fi
-    if [ -n "$_ENV_OWNER_NAME" ]; then
-        read -p "Your name [$_ENV_OWNER_NAME]: " _INPUT
-        OWNER_NAME="${_INPUT:-$_ENV_OWNER_NAME}"
-    else
-        read -p "Your name (for the agent to know who you are): " OWNER_NAME
-    fi
-    read -p "Timezone [$_ENV_TIMEZONE]: " _INPUT
-    TIMEZONE="${_INPUT:-$_ENV_TIMEZONE}"
 
     fi # end interactive Quick Setup
 
@@ -1860,6 +1952,89 @@ echo ""
 echo -e "  ${GREEN}✓ Installation complete${NC}"
 
 echo ""
+
+#═══════════════════════════════════════════════════════════════════════
+# STEP 9: Google OAuth Authorization (if configured)
+#═══════════════════════════════════════════════════════════════════════
+if [ -n "${GOOGLE_OAUTH_CREDENTIALS_FILE:-}" ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}STEP 9/$TOTAL_STEPS: Google OAuth Authorization${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    if [ "$AUTO_MODE" = true ]; then
+        echo -e "${YELLOW}Google OAuth requires interactive authorization.${NC}"
+        echo "Run this manually after deploy via SSM:"
+        echo ""
+        echo -e "  ${CYAN}aws ssm start-session --target $INSTANCE_ID --region $AWS_REGION${NC}"
+        echo -e "  ${CYAN}sudo -u openclaw bash -c 'source ~/.openclaw/.env && GOG_KEYRING_PASSWORD=\$GOG_KEYRING_PASSWORD gog auth add <email> --remote --step 1 --services gmail,calendar,drive --readonly'${NC}"
+        echo ""
+    else
+        echo "Your Google OAuth credentials have been deployed to the instance."
+        echo "Let's authorize a Google account now."
+        echo ""
+        read -p "Google email to authorize (e.g. user@domain.com): " GOOGLE_EMAIL
+
+        if [ -n "$GOOGLE_EMAIL" ]; then
+            echo ""
+            echo "  Starting OAuth flow (step 1)..."
+            echo ""
+
+            set +e
+            GOG_STEP1_OUTPUT=$(run_ssm_command "$INSTANCE_ID" "$AWS_REGION" \
+                "sudo -u openclaw bash -c 'source /home/openclaw/.openclaw/.env && GOG_KEYRING_PASSWORD=\$GOG_KEYRING_PASSWORD gog auth add $GOOGLE_EMAIL --remote --step 1 --services gmail,calendar,drive --readonly'")
+            GOG_STEP1_RC=$?
+            set -e
+
+            if [ $GOG_STEP1_RC -ne 0 ]; then
+                echo -e "${RED}Failed to start OAuth flow. You can retry manually via SSM.${NC}"
+                echo "$GOG_STEP1_OUTPUT"
+            else
+                # Extract the auth URL from the output
+                AUTH_URL=$(echo "$GOG_STEP1_OUTPUT" | grep -oE 'https://accounts\.google\.com/[^ ]+' | head -1)
+
+                if [ -n "$AUTH_URL" ]; then
+                    echo -e "${CYAN}Open this URL in your browser to authorize:${NC}"
+                    echo ""
+                    echo "  $AUTH_URL"
+                    echo ""
+                    echo "After authorizing, you'll be redirected to a URL."
+                    echo "Copy the FULL redirect URL and paste it below."
+                    echo ""
+                    read -p "Paste redirect URL: " REDIRECT_URL
+
+                    if [ -n "$REDIRECT_URL" ]; then
+                        echo ""
+                        echo "  Completing OAuth flow (step 2)..."
+
+                        set +e
+                        GOG_STEP2_OUTPUT=$(run_ssm_command "$INSTANCE_ID" "$AWS_REGION" \
+                            "sudo -u openclaw bash -c 'source /home/openclaw/.openclaw/.env && GOG_KEYRING_PASSWORD=\$GOG_KEYRING_PASSWORD gog auth add $GOOGLE_EMAIL --remote --step 2 --services gmail,calendar,drive --readonly --auth-url \"$REDIRECT_URL\"'")
+                        GOG_STEP2_RC=$?
+                        set -e
+
+                        if [ $GOG_STEP2_RC -ne 0 ]; then
+                            echo -e "${RED}OAuth step 2 failed. You can retry manually via SSM.${NC}"
+                            echo "$GOG_STEP2_OUTPUT"
+                        else
+                            echo -e "  ${GREEN}✓ Google OAuth authorized for $GOOGLE_EMAIL${NC}"
+                        fi
+                    else
+                        echo -e "${YELLOW}Skipped. You can authorize later via SSM.${NC}"
+                    fi
+                else
+                    echo "OAuth output:"
+                    echo "$GOG_STEP1_OUTPUT"
+                    echo ""
+                    echo -e "${YELLOW}Could not extract auth URL. You can complete manually via SSM.${NC}"
+                fi
+            fi
+        else
+            echo -e "${YELLOW}Skipped. You can authorize later via SSM.${NC}"
+        fi
+        echo ""
+    fi
+fi
 
 #═══════════════════════════════════════════════════════════════════════
 # COMPLETE

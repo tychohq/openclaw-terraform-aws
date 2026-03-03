@@ -81,6 +81,14 @@ output "next_steps" {
   value = local.has_config ? local._next_steps_configured : local._next_steps_manual
 }
 
+output "slack_app_manifest" {
+  description = "Slack app manifest JSON — paste into api.slack.com → Your App → App Manifest"
+  value       = templatefile("${path.module}/../templates/slack-app-manifest.json.tftpl", {
+    app_name   = var.assistant_name
+    owner_name = var.owner_name
+  })
+}
+
 output "google_oauth_configured" {
   description = "Whether Google OAuth credentials were provided"
   value       = var.google_oauth_credentials_json != "" ? "Yes — authorize via SSM:\n  Step 1: gog auth add user@domain.com --remote --step 1 --services gmail,calendar,drive --readonly\n  Step 2: gog auth add user@domain.com --remote --step 2 --services gmail,calendar,drive --readonly --auth-url <redirect-url>\n  (paste redirect URL within 5 min; step 2 MUST include the same --services and --readonly flags)" : "No"
